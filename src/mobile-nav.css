@@ -1,0 +1,42 @@
+/* Pada layar kecil, sidebar berubah menjadi navigasi bawah yang selalu tersedia. */
+@media (max-width: 650px) {
+  .sidebar {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 72px;
+    padding: 6px 10px 8px;
+    transform: none;
+    transition: none;
+    background: #ffffff;
+    border-top: 1px solid #dfe9e6;
+    box-shadow: 0 -5px 18px rgba(18, 59, 93, .09);
+  }
+
+  .sidebar.is-open { transform: none; }
+  .brand, .sidebar-label, .sidebar-spacer, .help-card, .sidebar-footer,
+  .mobile-menu, .mobile-overlay { display: none !important; }
+  .sidebar nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; width: 100%; height: 100%; }
+  .nav-item {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 5px 3px 4px;
+    border-radius: 8px;
+    color: #789095;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+    font-size: 11px;
+  }
+  .nav-item.active { background: #e2f3ed; color: #246a5d; }
+  .nav-item:hover { background: #f0f7f5; color: #246a5d; }
+  .nav-pip { display: none; }
+  .main-content { padding-bottom: 72px; }
+  .toast { bottom: 88px; }
+}

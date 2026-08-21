@@ -1,0 +1,82 @@
+/* Ukuran huruf yang nyaman untuk pembacaan instrumen dan pencatatan supervisi. */
+body { font-size: 15px; }
+.sidebar-label { font-size: 12px; }
+.nav-item, .sidebar-footer { font-size: 14px; }
+.breadcrumbs { font-size: 13px; }
+.profile strong { font-size: 13px; }
+.profile span { font-size: 11px; }
+.eyebrow { font-size: 12px; }
+.welcome-row h1, .workspace-heading h1 { font-size: 34px; }
+.muted { font-size: 14px; }
+.primary-button, .secondary-button { font-size: 14px; }
+.secondary-button.compact { font-size: 13px; }
+.stat-copy span { font-size: 13px; }
+.stat-copy strong { font-size: 30px; }
+.stat-copy small { font-size: 12px; }
+.panel h2, .stage-intro h2 { font-size: 18px; }
+.row-main strong { font-size: 14px; }
+.row-main span { font-size: 12px; }
+.row-score strong { font-size: 17px; }
+.row-score span, .draft-label { font-size: 11px !important; }
+.cycle-step strong { font-size: 13px; }
+.cycle-step div:nth-child(2) span { font-size: 12px; }
+.step-status { font-size: 11px !important; }
+.cycle-quote { font-size: 12px; }
+.status-badge { font-size: 12px; }
+.back-button { font-size: 13px; }
+.meta-summary strong { font-size: 14px; }
+.meta-summary span { font-size: 12px; }
+.form-grid label, .long-field, .note-field { font-size: 13px; }
+.form-grid input, .form-grid select, input, select, textarea { font-size: 13px; }
+.stepper-item strong { font-size: 13px; }
+.stepper-item small { font-size: 11px; }
+.stage-score strong { font-size: 29px; }
+.stage-score small { font-size: 11px; }
+.score-guide { font-size: 12px; }
+.score-guide span:not(:first-child) { font-size: 12px; }
+.section-title span { font-size: 12px; }
+.section-title em { font-size: 11px; }
+.rubric-title strong { font-size: 14px; }
+.rubric-content p { font-size: 13px; }
+.score-pill { font-size: 11px; }
+.note-field span { font-size: 12px; }
+.note-field textarea { font-size: 12px; }
+.score-control > span { font-size: 11px; }
+.score-control button { font-size: 11px; }
+.total-card span { font-size: 12px; }
+.total-card strong { font-size: 23px; }
+.total-card > .muted { font-size: 12px; }
+.long-field span { font-size: 13px; }
+.feedback-header { font-size: 11px; }
+.feedback-row strong { font-size: 12px; }
+.feedback-row textarea, .follow-up-row input { font-size: 12px; }
+.follow-up-row strong { font-size: 12px; }
+.teacher-header { font-size: 11px; }
+.teacher-row, .teacher-cell strong { font-size: 13px; }
+.status-text { font-size: 12px; }
+.search-box input { font-size: 13px; }
+.report-row strong { font-size: 14px; }
+.report-row span { font-size: 12px; }
+.toast { font-size: 14px; }
+.meta-form > .secondary-button {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 5px 12px rgba(15, 118, 110, .22);
+}
+.meta-form > .secondary-button:hover {
+  background: #0b5f59;
+  border-color: #0b5f59;
+}
+.stepper-item.locked { color: #a9b5b5; cursor: not-allowed; opacity: .72; }
+.stepper-item.locked .stepper-circle { background: #eef2f1; border-color: #dce5e2; color: #aab8b6; }
+
+@media (max-width: 650px) {
+  .welcome-row h1, .workspace-heading h1 { font-size: 29px; }
+  .muted { font-size: 13px; }
+  .rubric-title strong { font-size: 13px; }
+  .rubric-content p { font-size: 12px; }
+  .meta-form .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .meta-form .form-grid label:first-child,
+  .meta-form .form-grid label:last-child { grid-column: 1 / -1; }
+}
