@@ -5,6 +5,7 @@ import './styles.css'
 import './readability.css'
 import './mobile-nav.css'
 import './theme.css'
+import './progressive.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

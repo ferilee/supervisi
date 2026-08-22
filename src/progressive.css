@@ -1,0 +1,84 @@
+/* Progressive assessment: fokus pada beberapa butir tanpa kehilangan navigasi keseluruhan. */
+.progressive-stage .stage-intro { margin-bottom: 15px; }
+.item-map {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 19px;
+  border: 1px solid #eadfd2;
+  border-radius: 10px;
+  background: rgba(255, 250, 243, .78);
+}
+.item-map-label { margin-right: 4px; color: #86796e; font-size: 11px; font-weight: 600; }
+.item-map button {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid #dfd3c6;
+  border-radius: 50%;
+  background: #fffdf9;
+  color: #9d8f83;
+  font-size: 10px;
+  font-weight: 700;
+}
+.item-map button:hover { border-color: #83bda8; color: #397767; }
+.item-map button.complete { background: #b9d9c9; border-color: #b9d9c9; color: #286b5c; }
+.progressive-section { margin-bottom: 18px; }
+.progressive-card { min-height: 0; padding: 14px 15px; }
+.progressive-card .rubric-content p { margin-bottom: 10px; }
+.progressive-card .rubric-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.progressive-card .score-control { width: auto; padding: 0; border-left: 0; display: flex; align-items: center; gap: 9px; }
+.progressive-card .score-control > span { margin: 0; }
+.progressive-card .score-control > div { display: flex; gap: 5px; }
+.note-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #dfd3c6;
+  border-radius: 6px;
+  background: transparent;
+  color: #7d7065;
+  font-size: 11px;
+}
+.note-toggle:hover, .note-toggle.has-note { border-color: #9bcab8; color: #397767; background: #edf6f1; }
+.progressive-card .note-field { margin-top: 12px; padding-top: 11px; border-top: 1px dashed #e6dace; }
+.progressive-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 17px; color: #897b70; font-size: 11px; }
+.section-accordion { margin-bottom: 19px; }
+.accordion-section { margin-bottom: 9px; overflow: hidden; }
+.section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+  color: #78685d;
+  text-align: left;
+}
+.section-toggle > svg { color: #9d8d7e; transition: transform .2s ease; }
+.accordion-section.open .section-toggle > svg { transform: rotate(180deg); }
+.section-toggle .section-title { margin: 0; }
+.section-toggle .section-title span { color: #78685d; }
+.accordion-section.open .section-toggle { background: rgba(237, 246, 241, .68); }
+.accordion-section.open .progressive-card { border-top: 1px solid #eadfd2; border-radius: 0; margin-bottom: 0; }
+.accordion-section.open .progressive-card + .progressive-card { border-top: 0; }
+.accordion-section.open .progressive-card:last-child { border-radius: 0 0 10px 10px; }
+
+@media (max-width: 650px) {
+  .item-map { gap: 5px; padding: 9px; }
+  .item-map-label { width: 100%; margin: 0 0 2px; }
+  .progressive-card { padding: 12px 11px; }
+  .progressive-card .rubric-actions { align-items: flex-start; flex-direction: column; gap: 9px; padding-left: 27px; }
+  .progressive-card .score-control { width: 100%; justify-content: space-between; }
+  .progressive-card .score-control > div { gap: 8px; }
+  .note-toggle { width: 100%; justify-content: center; }
+  .progressive-pagination { margin-bottom: 15px; }
+  .progressive-pagination .secondary-button { padding: 8px 9px; }
+  .progressive-stage .total-card { margin-bottom: 4px; }
+}
