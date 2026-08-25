@@ -25,6 +25,11 @@
 .teacher-form-fields input { width: 100%; font-size: 13px; }
 .form-error { margin: 12px 24px 0; color: #b35f54; font-size: 12px; }
 .teacher-modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 20px 24px 22px; }
+.supervisor-table { margin-top: 22px; }
+.supervisor-header, .supervisor-row { display: grid; grid-template-columns: 1.5fr 1fr .7fr auto; gap: 16px; align-items: center; }
+.supervisor-header { padding: 0 10px 10px; color: #9aa7a8; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+.supervisor-row { padding: 13px 10px; border-top: 1px solid #edf1f0; color: #687d82; font-size: 11px; }
+.supervisor-toggle { min-width: 83px; justify-content: center; }
 
 @media (max-width: 650px) {
   .observation-info-required { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
@@ -39,4 +44,9 @@
   .teacher-modal-head, .teacher-form-fields { padding-left: 18px; padding-right: 18px; }
   .teacher-modal-footer { padding: 18px; }
   .teacher-modal-footer button { flex: 1; justify-content: center; }
+  .supervisor-header { display: none; }
+  .supervisor-row { grid-template-columns: 1fr auto; gap: 8px; padding: 13px 5px; }
+  .supervisor-row > span:nth-child(2) { grid-column: 1; }
+  .supervisor-row > span:nth-child(3) { grid-column: 1; grid-row: 2; }
+  .supervisor-row .supervisor-toggle { grid-column: 2; grid-row: 1 / span 2; }
 }

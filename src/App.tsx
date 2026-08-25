@@ -6,8 +6,8 @@ import {
 } from 'lucide-react'
 import { feedbackAspects, followUpAspects, observationItems, preObservationItems, reflectionQuestions, scoreLabels } from './data/instrument'
 import { averageScore, completedCount, totalScore } from './lib/scoring'
-import { getAssessments, getTeachers, makeId, saveAssessments, saveTeachers } from './lib/storage'
-import type { AppPage, Assessment, RubricItem, ScoredResponse, Score, Stage, Teacher } from './types'
+import { defaultSupervisors, getAssessments, getSupervisors, getTeachers, makeId, saveAssessments, saveSupervisors, saveTeachers } from './lib/storage'
+import type { AppPage, Assessment, RubricItem, ScoredResponse, Score, Stage, Supervisor, Teacher } from './types'
 
 const steps: Array<{ id: Stage; label: string; short: string }> = [
   { id: 'pra-observasi', label: 'Pra-observasi', short: 'RPP / Modul Ajar' },
@@ -15,8 +15,8 @@ const steps: Array<{ id: Stage; label: string; short: string }> = [
   { id: 'pasca-observasi', label: 'Pasca-observasi', short: 'Refleksi & Tindak Lanjut' },
 ]
 
-const freshAssessment = (teacherId = ''): Assessment => ({
-  id: makeId(), teacherId, period: '2026', className: '', subject: '', topic: '', observer: 'Kepala Sekolah', observationDate: new Date().toISOString().slice(0, 10),
+const freshAssessment = (teacherId = '', observer = defaultSupervisors[0]?.name ?? ''): Assessment => ({
+  id: makeId(), teacherId, period: '2026', className: '', subject: '', topic: '', observer, observationDate: new Date().toISOString().slice(0, 10),
   status: 'draft', currentStage: 'pra-observasi', preObservation: {}, observation: {}, reflection: {}, feedback: {},
   followUps: followUpAspects.map((aspect) => ({ aspect, action: '', owner: '', dueDate: '' })), supervisorNote: '', recommendation: '',
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -26,6 +26,7 @@ function App() {
   const [page, setPage] = useState<AppPage>('dashboard')
   const [mobileNav, setMobileNav] = useState(false)
   const [teachers, setTeachers] = useState<Teacher[]>(() => getTeachers())
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(() => getSupervisors())
   const [assessments, setAssessments] = useState<Assessment[]>(() => getAssessments())
   const [active, setActive] = useState<Assessment | null>(null)
   const [search, setSearch] = useState('')
@@ -42,9 +43,10 @@ function App() {
   }
 
   const persistTeachers = (next: Teacher[]) => { setTeachers(next); saveTeachers(next) }
+  const persistSupervisors = (next: Supervisor[]) => { setSupervisors(next); saveSupervisors(next) }
 
   const startAssessment = () => {
-    setActive(freshAssessment())
+    setActive(freshAssessment('', supervisors.find((item) => item.active)?.name ?? ''))
     setPage('assessment')
   }
 
@@ -70,6 +72,7 @@ function App() {
           <NavItem icon={<LayoutDashboard size={18} />} label="Ringkasan" active={page === 'dashboard'} onClick={() => navigate('dashboard')} />
           <NavItem icon={<ClipboardCheck size={18} />} label="Penilaian" active={page === 'assessment'} onClick={() => navigate('assessment')} />
           <NavItem icon={<Users size={18} />} label="Daftar guru" active={page === 'teachers'} onClick={() => navigate('teachers')} />
+          <NavItem icon={<Settings2 size={18} />} label="Supervisor" active={page === 'supervisors'} onClick={() => navigate('supervisors')} />
           <NavItem icon={<BarChart3 size={18} />} label="Laporan" active={page === 'reports'} onClick={() => navigate('reports')} />
         </nav>
         <div className="sidebar-spacer" />
@@ -80,13 +83,14 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Buka menu"><Menu size={22} /></button>
-          <div className="breadcrumbs"><span>SMKN Pasirian</span><span className="slash">/</span><strong>{page === 'dashboard' ? 'Ringkasan' : page === 'assessment' ? 'Penilaian' : page === 'teachers' ? 'Daftar guru' : 'Laporan'}</strong></div>
+          <div className="breadcrumbs"><span>SMKN Pasirian</span><span className="slash">/</span><strong>{page === 'dashboard' ? 'Ringkasan' : page === 'assessment' ? 'Penilaian' : page === 'teachers' ? 'Daftar guru' : page === 'supervisors' ? 'Supervisor' : 'Laporan'}</strong></div>
           <div className="topbar-actions"><button className="icon-button" aria-label="Notifikasi"><Bell size={18} /><i /></button><div className="profile"><div className="avatar navy">KS</div><div><strong>Kepala Sekolah</strong><span>Administrator</span></div><ChevronDown size={16} /></div></div>
         </header>
         {page === 'dashboard' && <Dashboard assessments={assessments} teachers={teachers} onNew={startAssessment} onOpen={editAssessment} />}
         {page === 'teachers' && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} onTeachersChange={persistTeachers} />}
+        {page === 'supervisors' && <Supervisors supervisors={supervisors} onSupervisorsChange={persistSupervisors} />}
         {page === 'reports' && <Reports assessments={assessments} teachers={teachers} onOpen={editAssessment} />}
-        {page === 'assessment' && <AssessmentWorkspace assessment={active ?? freshAssessment()} teachers={teachers} onBack={() => navigate('dashboard')} onSave={persistAssessment} />}
+        {page === 'assessment' && <AssessmentWorkspace assessment={active ?? freshAssessment('', supervisors.find((item) => item.active)?.name ?? '')} teachers={teachers} supervisors={supervisors} onBack={() => navigate('dashboard')} onSave={persistAssessment} />}
       </main>
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
@@ -129,7 +133,7 @@ function getMissingObservationInfo(assessment: Assessment) {
   return missing
 }
 
-function AssessmentWorkspace({ assessment: initial, teachers, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
+function AssessmentWorkspace({ assessment: initial, teachers, supervisors, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
   const [assessment, setAssessment] = useState(initial)
   const [stage, setStage] = useState<Stage>(initial.currentStage)
   const [showMeta, setShowMeta] = useState(false)
@@ -147,7 +151,7 @@ function AssessmentWorkspace({ assessment: initial, teachers, onBack, onSave }: 
   return <div className="page-wrap workspace-page">
     <div className="workspace-top"><button className="back-button" onClick={onBack}><ArrowLeft size={17} /> Kembali ke ringkasan</button><div className="workspace-actions"><span className={`status-badge ${assessment.status}`}>{assessment.status === 'selesai' ? <Check size={14} /> : <span className="status-dot" />}{assessment.status === 'selesai' ? 'Selesai' : 'Draf'}</span><button className="secondary-button compact" onClick={() => save()}><Check size={16} /> Simpan draf</button></div></div>
     <div className="workspace-heading"><div><p className="eyebrow">Penilaian kinerja guru · {assessment.period}</p><h1>{teacher?.name ?? 'Penilaian baru'}</h1><p className="muted">Lengkapi instrumen secara bertahap. Perubahan tersimpan sebagai draf.</p></div><button className="icon-button outlined" aria-label="Unduh laporan" onClick={() => window.print()}><FileDown size={18} /></button></div>
-    {showMeta && <MetaForm assessment={assessment} teachers={teachers} onChange={update} onClose={() => { save('Identitas observasi tersimpan'); setShowMeta(false) }} />}
+    {showMeta && <MetaForm assessment={assessment} teachers={teachers} supervisors={supervisors} onChange={update} onClose={() => { save('Identitas observasi tersimpan'); setShowMeta(false) }} />}
     {!showMeta && <button className={`meta-summary ${teacher ? '' : 'is-empty'}`} onClick={() => setShowMeta(true)} aria-expanded={false} aria-controls="observation-info-panel"><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div><strong>{teacher?.name ?? 'Lengkapi informasi observasi'}</strong><span>{teacher ? `${assessment.className || 'Kelas belum diisi'} · ${assessment.subject || teacher.subject} · Observasi ${formatDate(assessment.observationDate)}` : 'Tambahkan guru, kelas, mata pelajaran, dan tanggal observasi'}</span></div><ChevronDown size={18} /></button>}
     <div className="stepper">{steps.map((item, index) => { const unlocked = observationInfoComplete && isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id && observationInfoComplete ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{!observationInfoComplete ? 'Lengkapi informasi observasi' : unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
     {!observationInfoComplete && <ObservationInfoRequired missing={missingObservationInfo} onOpen={() => setShowMeta(true)} />}
@@ -163,8 +167,17 @@ function ObservationInfoRequired({ missing, onOpen }: { missing: string[]; onOpe
   return <div className="observation-info-required"><div className="required-info-icon"><CircleAlert size={20} /></div><div className="required-info-copy"><strong>Lengkapi informasi observasi terlebih dahulu</strong><span>Butir penilaian akan aktif setelah data berikut diisi: {missing.join(', ')}.</span></div><button className="primary-button compact" onClick={onOpen}>Isi informasi</button></div>
 }
 
-function MetaForm({ assessment, teachers, onChange, onClose }: { assessment: Assessment; teachers: Teacher[]; onChange: (patch: Partial<Assessment>) => void; onClose: () => void }) {
-  return <div id="observation-info-panel" className="meta-form panel"><div className="panel-head"><div><h2>Informasi observasi</h2><p className="muted">Identitas ini akan tampil di laporan.</p></div><button className="icon-button" onClick={onClose} aria-label="Tutup informasi observasi"><X size={18} /></button></div><div className="form-grid"><label>Nama guru<select value={assessment.teacherId} onChange={(event) => { const teacher = teachers.find((item) => item.id === event.target.value); onChange({ teacherId: event.target.value, subject: assessment.subject || teacher?.subject || '' }) }}><option value="">Pilih guru...</option>{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label><label>Kelas<input value={assessment.className} onChange={(event) => onChange({ className: event.target.value })} placeholder="Contoh: XI TJKT 1" /></label><label>Mata pelajaran<input value={assessment.subject} onChange={(event) => onChange({ subject: event.target.value })} placeholder="Mata pelajaran" /></label><label>Materi pokok<input value={assessment.topic} onChange={(event) => onChange({ topic: event.target.value })} placeholder="Materi yang diamati" /></label><label>Tanggal observasi<input type="date" value={assessment.observationDate} onChange={(event) => onChange({ observationDate: event.target.value })} /></label><label>Supervisor<input value={assessment.observer} onChange={(event) => onChange({ observer: event.target.value })} /></label></div><button className="secondary-button compact" onClick={onClose}>Simpan identitas</button></div>
+function MetaForm({ assessment, teachers, supervisors, onChange, onClose }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; onChange: (patch: Partial<Assessment>) => void; onClose: () => void }) {
+  const selectedTeacher = teachers.find((item) => item.id === assessment.teacherId)
+  const subjectOptions = selectedTeacher ? getTeacherSubjects(selectedTeacher) : []
+  const currentSubjectIsLegacy = Boolean(assessment.subject) && !subjectOptions.includes(assessment.subject)
+  const activeSupervisors = supervisors.filter((item) => item.active)
+  const currentSupervisorIsLegacy = Boolean(assessment.observer) && !activeSupervisors.some((item) => item.name === assessment.observer)
+  return <div id="observation-info-panel" className="meta-form panel"><div className="panel-head"><div><h2>Informasi observasi</h2><p className="muted">Identitas ini akan tampil di laporan.</p></div><button className="icon-button" onClick={onClose} aria-label="Tutup informasi observasi"><X size={18} /></button></div><div className="form-grid"><label>Nama guru<select value={assessment.teacherId} onChange={(event) => { const teacher = teachers.find((item) => item.id === event.target.value); const subjects = teacher ? getTeacherSubjects(teacher) : []; onChange({ teacherId: event.target.value, subject: subjects[0] ?? '' }) }}><option value="">Pilih guru...</option>{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label><label>Kelas<input value={assessment.className} onChange={(event) => onChange({ className: event.target.value })} placeholder="Contoh: XI TJKT 1" /></label><label>Mata pelajaran<select value={assessment.subject} onChange={(event) => onChange({ subject: event.target.value })} disabled={!selectedTeacher}><option value="">{selectedTeacher ? 'Pilih mata pelajaran...' : 'Pilih guru terlebih dahulu'}</option>{currentSubjectIsLegacy && <option value={assessment.subject}>{assessment.subject} (tersimpan)</option>}{subjectOptions.map((subject) => <option key={subject} value={subject}>{subject}</option>)}</select></label><label>Materi pokok<input value={assessment.topic} onChange={(event) => onChange({ topic: event.target.value })} placeholder="Materi yang diamati" /></label><label>Tanggal observasi<input type="date" value={assessment.observationDate} onChange={(event) => onChange({ observationDate: event.target.value })} /></label><label>Supervisor<select value={assessment.observer} onChange={(event) => onChange({ observer: event.target.value })} disabled={activeSupervisors.length === 0}><option value="">{activeSupervisors.length ? 'Pilih supervisor...' : 'Atur supervisor terlebih dahulu'}</option>{currentSupervisorIsLegacy && <option value={assessment.observer}>{assessment.observer} (tersimpan)</option>}{activeSupervisors.map((supervisor) => <option key={supervisor.id} value={supervisor.name}>{supervisor.name}{supervisor.position ? ` — ${supervisor.position}` : ''}</option>)}</select></label></div><button className="secondary-button compact" onClick={onClose}>Simpan identitas</button></div>
+}
+
+function getTeacherSubjects(teacher: Teacher) {
+  return teacher.subject.split(/[;,]/).map((subject) => subject.trim()).filter(Boolean)
 }
 
 function RubricStage({ title, intro, items, responses, onResponse, evidenceLabel = 'Catatan supervisor' }: { title: string; intro: string; items: RubricItem[]; responses: Record<string, ScoredResponse>; onResponse: (id: string, patch: Partial<ScoredResponse>) => void; evidenceLabel?: string }) { const grouped = items.reduce<Record<string, RubricItem[]>>((result, item) => { (result[item.section] ??= []).push(item); return result }, {}); const done = completedCount(items, responses); return <section className="rubric-stage"><div className="stage-intro"><div><h2>{title}</h2><p className="muted">{intro}</p></div><div className="stage-score"><strong>{done}<span>/{items.length}</span></strong><small>butir dinilai</small></div></div><div className="score-guide"><span>Skala penilaian</span>{Object.entries(scoreLabels).map(([score, label]) => <span key={score}><b>{score}</b>{label}</span>)}</div>{Object.entries(grouped).map(([section, sectionItems]) => <div className="rubric-section" key={section}><div className="section-title"><span>{section}</span><em>{sectionItems.length} butir</em></div>{sectionItems.map((item) => <RubricCard item={item} key={item.id} response={responses[item.id]} onResponse={onResponse} evidenceLabel={evidenceLabel} />)}</div>)}<div className="total-card"><div><span>Total skor sementara</span><strong>{totalScore(items, responses)} <small>/ {items.length * 4}</small></strong></div><div className="total-meter"><i style={{ width: `${(totalScore(items, responses) / (items.length * 4)) * 100}%` }} /></div><span className="muted">Rata-rata {averageScore(items, responses) ? averageScore(items, responses).toFixed(2) : '—'}</span></div></section> }
@@ -324,6 +337,31 @@ function PrintAdditionalNotes() {
 
 function PrintSignature({ observer }: { observer: string }) {
   return <div className="print-signature"><strong>{observer}</strong><div className="signature-space" /><span>(................................................)</span></div>
+}
+
+function Supervisors({ supervisors, onSupervisorsChange }: { supervisors: Supervisor[]; onSupervisorsChange: (supervisors: Supervisor[]) => void }) {
+  const [showDialog, setShowDialog] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const addSupervisor = (name: string, position: string) => {
+    const duplicate = supervisors.some((supervisor) => supervisor.name.trim().toLowerCase() === name.trim().toLowerCase())
+    if (duplicate) return 'Supervisor dengan nama tersebut sudah terdaftar.'
+    const supervisor = { id: `supervisor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: name.trim(), position: position.trim(), active: true }
+    onSupervisorsChange([...supervisors, supervisor])
+    setShowDialog(false)
+    setFeedback(`${supervisor.name} berhasil ditambahkan.`)
+    return undefined
+  }
+  const toggleSupervisor = (id: string) => onSupervisorsChange(supervisors.map((supervisor) => supervisor.id === id ? { ...supervisor, active: !supervisor.active } : supervisor))
+
+  return <div className="page-wrap"><section className="welcome-row"><div><p className="eyebrow">Pengaturan data</p><h1>Supervisor</h1><p className="muted">Atur nama supervisor yang dapat dipilih pada informasi observasi.</p></div><button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={18} /> Tambah supervisor</button></section><div className="panel table-panel"><div className="panel-head"><div><h2>{supervisors.length} supervisor terdaftar</h2><p className="muted">Supervisor nonaktif tidak muncul pada penilaian baru.</p></div></div>{feedback && <div className="csv-feedback success" role="status">{feedback}<button type="button" onClick={() => setFeedback('')} aria-label="Tutup pesan"><X size={14} /></button></div>}<div className="supervisor-table"><div className="supervisor-header"><span>Nama supervisor</span><span>Jabatan</span><span>Status</span><span /></div>{supervisors.map((supervisor) => <div className="supervisor-row" key={supervisor.id}><div className="teacher-cell"><div className="avatar navy">{makeTeacherInitials(supervisor.name)}</div><strong>{supervisor.name}</strong></div><span>{supervisor.position || '—'}</span><span className={`status-text ${supervisor.active ? 'complete' : ''}`}>{supervisor.active ? 'Aktif' : 'Nonaktif'}</span><button type="button" className="secondary-button compact supervisor-toggle" onClick={() => toggleSupervisor(supervisor.id)}>{supervisor.active ? 'Nonaktifkan' : 'Aktifkan'}</button></div>)}</div></div>{showDialog && <SupervisorDialog onClose={() => setShowDialog(false)} onSubmit={addSupervisor} />}</div>
+}
+
+function SupervisorDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (name: string, position: string) => string | undefined }) {
+  const [name, setName] = useState('')
+  const [position, setPosition] = useState('')
+  const [error, setError] = useState('')
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!name.trim()) { setError('Nama supervisor wajib diisi.'); return } const message = onSubmit(name, position); if (message) setError(message) }
+  return <div className="teacher-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><form className="teacher-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="supervisor-modal-title"><div className="teacher-modal-head"><div><span className="eyebrow">Pengaturan data</span><h2 id="supervisor-modal-title">Tambah supervisor</h2><p className="muted">Nama ini akan tersedia di informasi observasi.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Tutup"><X size={18} /></button></div><div className="teacher-form-fields"><label>Nama supervisor<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: Nurhayati, M.Pd." /></label><label>Jabatan<input value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Contoh: Kepala Sekolah" /></label></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose}>Batal</button><button type="submit" className="primary-button compact"><Plus size={15} /> Tambahkan supervisor</button></div></form></div>
 }
 
 function Teachers({ teachers, assessments, onNew, onTeachersChange }: { teachers: Teacher[]; assessments: Assessment[]; onNew: () => void; onTeachersChange: (teachers: Teacher[]) => void }) {

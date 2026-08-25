@@ -1,13 +1,18 @@
-import type { Assessment, Teacher } from '../types'
+import type { Assessment, Supervisor, Teacher } from '../types'
 
 const ASSESSMENTS_KEY = 'supervisi-assessments-v1'
 const TEACHERS_KEY = 'supervisi-teachers-v1'
+const SUPERVISORS_KEY = 'supervisi-supervisors-v1'
 
 export const defaultTeachers: Teacher[] = [
   { id: 't-1', name: 'Siti Rahmawati, S.Pd.', subject: 'Bahasa Indonesia', initials: 'SR', color: '#b9e3d5' },
   { id: 't-2', name: 'Budi Santoso, S.Kom.', subject: 'Informatika', initials: 'BS', color: '#c7d8f8' },
   { id: 't-3', name: 'Dewi Lestari, S.Pd.', subject: 'Matematika', initials: 'DL', color: '#f7d7b4' },
   { id: 't-4', name: 'Ahmad Fauzan, S.Pd.', subject: 'Teknik Pemesinan', initials: 'AF', color: '#e7c5ed' },
+]
+
+export const defaultSupervisors: Supervisor[] = [
+  { id: 's-1', name: 'Kepala Sekolah', position: 'Kepala Sekolah', active: true },
 ]
 
 function read<T>(key: string, fallback: T): T {
@@ -25,6 +30,14 @@ export function getTeachers() {
 
 export function saveTeachers(teachers: Teacher[]) {
   localStorage.setItem(TEACHERS_KEY, JSON.stringify(teachers))
+}
+
+export function getSupervisors() {
+  return read<Supervisor[]>(SUPERVISORS_KEY, defaultSupervisors)
+}
+
+export function saveSupervisors(supervisors: Supervisor[]) {
+  localStorage.setItem(SUPERVISORS_KEY, JSON.stringify(supervisors))
 }
 
 export function getAssessments() {

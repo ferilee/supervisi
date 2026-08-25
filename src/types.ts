@@ -10,6 +10,13 @@ export interface Teacher {
   color: string
 }
 
+export interface Supervisor {
+  id: string
+  name: string
+  position: string
+  active: boolean
+}
+
 export interface RubricItem {
   id: string
   number: number
@@ -52,4 +59,4 @@ export interface Assessment {
   updatedAt: string
 }
 
-export type AppPage = 'dashboard' | 'assessment' | 'teachers' | 'reports'
+export type AppPage = 'dashboard' | 'assessment' | 'teachers' | 'supervisors' | 'reports'
