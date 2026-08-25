@@ -1,0 +1,32 @@
+.teacher-panel-head { align-items: center; }
+.teacher-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.upload-button { cursor: pointer; }
+.template-button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 6px; border: 0; background: transparent; color: #7d8197; font-size: 11px; }
+.template-button:hover { color: #5d50e8; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+.csv-feedback { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 -5px; padding: 10px 12px; border-radius: 8px; font-size: 12px; }
+.csv-feedback.success { background: #e4f7ed; color: #2f8d69; }
+.csv-feedback.error { background: #fff0ed; color: #b35f54; }
+.csv-feedback button { display: grid; place-items: center; padding: 2px; border: 0; background: transparent; color: currentColor; }
+.teacher-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(25, 28, 52, .55); backdrop-filter: blur(4px); }
+.teacher-modal { width: min(520px, 100%); border: 1px solid rgba(255,255,255,.72); border-radius: 18px; background: #ffffff; box-shadow: 0 24px 70px rgba(24, 27, 57, .25); }
+.teacher-modal-head { display: flex; justify-content: space-between; gap: 15px; padding: 22px 24px 17px; border-bottom: 1px solid #ececf2; }
+.teacher-modal-head .eyebrow { margin-bottom: 5px; }
+.teacher-modal-head h2 { margin: 0 0 6px; color: #202238; font-size: 20px; }
+.teacher-form-fields { display: grid; gap: 15px; padding: 22px 24px 5px; }
+.teacher-form-fields label { display: flex; flex-direction: column; gap: 7px; color: #686d84; font-size: 12px; font-weight: 600; }
+.teacher-form-fields input { width: 100%; font-size: 13px; }
+.form-error { margin: 12px 24px 0; color: #b35f54; font-size: 12px; }
+.teacher-modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 20px 24px 22px; }
+
+@media (max-width: 650px) {
+  .teacher-panel-head { align-items: flex-start; flex-direction: column; }
+  .teacher-actions { width: 100%; justify-content: flex-start; }
+  .teacher-actions .secondary-button { flex: 1; justify-content: center; }
+  .template-button { width: 100%; justify-content: center; padding: 8px; }
+  .teacher-modal-backdrop { align-items: end; padding: 0; }
+  .teacher-modal { width: 100%; border-radius: 20px 20px 0 0; }
+  .teacher-modal-head, .teacher-form-fields { padding-left: 18px; padding-right: 18px; }
+  .teacher-modal-footer { padding: 18px; }
+  .teacher-modal-footer button { flex: 1; justify-content: center; }
+}

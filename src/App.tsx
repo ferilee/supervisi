@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ArrowLeft, ArrowRight, BarChart3, Bell, BookOpenCheck, Check, ChevronDown, ClipboardCheck,
-  FileDown, FileText, LayoutDashboard, Maximize2, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck,
-  Sparkles, Users, X,
+  Download, FileDown, FileText, LayoutDashboard, Maximize2, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck,
+  Sparkles, Upload, Users, X,
 } from 'lucide-react'
 import { feedbackAspects, followUpAspects, observationItems, preObservationItems, reflectionQuestions, scoreLabels } from './data/instrument'
 import { averageScore, completedCount, totalScore } from './lib/scoring'
-import { getAssessments, getTeachers, makeId, saveAssessments } from './lib/storage'
+import { getAssessments, getTeachers, makeId, saveAssessments, saveTeachers } from './lib/storage'
 import type { AppPage, Assessment, RubricItem, ScoredResponse, Score, Stage, Teacher } from './types'
 
 const steps: Array<{ id: Stage; label: string; short: string }> = [
@@ -25,7 +25,7 @@ const freshAssessment = (teacherId = ''): Assessment => ({
 function App() {
   const [page, setPage] = useState<AppPage>('dashboard')
   const [mobileNav, setMobileNav] = useState(false)
-  const [teachers] = useState<Teacher[]>(() => getTeachers())
+  const [teachers, setTeachers] = useState<Teacher[]>(() => getTeachers())
   const [assessments, setAssessments] = useState<Assessment[]>(() => getAssessments())
   const [active, setActive] = useState<Assessment | null>(null)
   const [search, setSearch] = useState('')
@@ -40,6 +40,8 @@ function App() {
     setToast(message)
     window.setTimeout(() => setToast(''), 2600)
   }
+
+  const persistTeachers = (next: Teacher[]) => { setTeachers(next); saveTeachers(next) }
 
   const startAssessment = () => {
     setActive(freshAssessment())
@@ -82,7 +84,7 @@ function App() {
           <div className="topbar-actions"><button className="icon-button" aria-label="Notifikasi"><Bell size={18} /><i /></button><div className="profile"><div className="avatar navy">KS</div><div><strong>Kepala Sekolah</strong><span>Administrator</span></div><ChevronDown size={16} /></div></div>
         </header>
         {page === 'dashboard' && <Dashboard assessments={assessments} teachers={teachers} onNew={startAssessment} onOpen={editAssessment} />}
-        {page === 'teachers' && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} />}
+        {page === 'teachers' && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} onTeachersChange={persistTeachers} />}
         {page === 'reports' && <Reports assessments={assessments} teachers={teachers} onOpen={editAssessment} />}
         {page === 'assessment' && <AssessmentWorkspace assessment={active ?? freshAssessment()} teachers={teachers} onBack={() => navigate('dashboard')} onSave={persistAssessment} />}
       </main>
@@ -219,7 +221,87 @@ function FocusRubricModal({ item, index, total, response, evidenceLabel, onRespo
 
 function PostObservation({ assessment, onChange }: { assessment: Assessment; onChange: (next: Assessment) => void }) { const updateReflection = (key: string, value: string) => onChange({ ...assessment, reflection: { ...assessment.reflection, [key]: value } }); const updateFeedback = (aspect: string, field: 'strength' | 'development', value: string) => { const existing = assessment.feedback[aspect] ?? { strength: '', development: '' }; onChange({ ...assessment, feedback: { ...assessment.feedback, [aspect]: { ...existing, [field]: value } } }) }; const updateFollowUp = (index: number, field: 'action' | 'owner' | 'dueDate', value: string) => onChange({ ...assessment, followUps: assessment.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }); return <section className="post-stage"><div className="stage-intro"><div><h2>Refleksi & tindak lanjut</h2><p className="muted">Tutup proses supervisi dengan percakapan yang konkret dan disepakati bersama.</p></div></div><div className="post-section"><div className="section-title"><span>Refleksi guru</span><em>Diisi oleh guru</em></div>{reflectionQuestions.map(([key, question]) => <label className="long-field" key={key}><span>{question}</span><textarea value={assessment.reflection[key] ?? ''} onChange={(event) => updateReflection(key, event.target.value)} placeholder="Tulis refleksi guru..." rows={3} /></label>)}</div><div className="post-section"><div className="section-title"><span>Umpan balik supervisor</span><em>Kekuatan & area pengembangan</em></div><div className="feedback-table"><div className="feedback-header"><span>Aspek</span><span>Apresiasi / kekuatan</span><span>Area pengembangan</span></div>{feedbackAspects.map((aspect) => <div className="feedback-row" key={aspect}><strong>{aspect}</strong><textarea value={assessment.feedback[aspect]?.strength ?? ''} onChange={(event) => updateFeedback(aspect, 'strength', event.target.value)} placeholder="Apa yang sudah baik?" rows={3} /><textarea value={assessment.feedback[aspect]?.development ?? ''} onChange={(event) => updateFeedback(aspect, 'development', event.target.value)} placeholder="Apa yang perlu dikembangkan?" rows={3} /></div>)}</div></div><div className="post-section"><div className="section-title"><span>Rencana tindak lanjut</span><em>Kesepakatan bersama</em></div><div className="follow-up-list">{assessment.followUps.map((item, index) => <div className="follow-up-row" key={item.aspect}><strong>{item.aspect}</strong><input value={item.action} onChange={(event) => updateFollowUp(index, 'action', event.target.value)} placeholder="Tindak lanjut yang disepakati" /><input value={item.owner} onChange={(event) => updateFollowUp(index, 'owner', event.target.value)} placeholder="Penanggung jawab" /><input type="date" value={item.dueDate} onChange={(event) => updateFollowUp(index, 'dueDate', event.target.value)} /></div>)}</div><div className="form-grid two"><label>Catatan supervisor<textarea value={assessment.supervisorNote} onChange={(event) => onChange({ ...assessment, supervisorNote: event.target.value })} rows={4} placeholder="Catatan tambahan..." /></label><label>Rekomendasi / saran perbaikan<textarea value={assessment.recommendation} onChange={(event) => onChange({ ...assessment, recommendation: event.target.value })} rows={4} placeholder="Rekomendasi untuk periode berikutnya..." /></label></div></div></section> }
 
-function Teachers({ teachers, assessments, onNew }: { teachers: Teacher[]; assessments: Assessment[]; onNew: () => void }) { return <div className="page-wrap"><section className="welcome-row"><div><p className="eyebrow">Data sekolah</p><h1>Daftar guru</h1><p className="muted">Kelola guru yang masuk dalam pemantauan kinerja.</p></div><button className="primary-button" onClick={onNew}><Plus size={18} /> Penilaian baru</button></section><div className="panel table-panel"><div className="panel-head"><div><h2>{teachers.length} guru terdaftar</h2><p className="muted">Data contoh siap diganti dengan data sekolah.</p></div><button className="secondary-button compact"><Plus size={16} /> Tambah guru</button></div><div className="teacher-table"><div className="teacher-header"><span>Guru</span><span>Mata pelajaran</span><span>Penilaian</span><span>Status terbaru</span></div>{teachers.map((teacher) => { const items = assessments.filter((assessment) => assessment.teacherId === teacher.id); const latest = items[0]; return <div className="teacher-row" key={teacher.id}><div className="teacher-cell"><div className="avatar" style={{ background: teacher.color }}>{teacher.initials}</div><strong>{teacher.name}</strong></div><span>{teacher.subject}</span><span>{items.length} penilaian</span><span className={`status-text ${latest?.status === 'selesai' ? 'complete' : ''}`}>{latest ? latest.status === 'selesai' ? 'Selesai' : 'Draf' : 'Belum ada'}</span></div> })}</div></div></div> }
+function Teachers({ teachers, assessments, onNew, onTeachersChange }: { teachers: Teacher[]; assessments: Assessment[]; onNew: () => void; onTeachersChange: (teachers: Teacher[]) => void }) {
+  const [showDialog, setShowDialog] = useState(false)
+  const [csvFeedback, setCsvFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const addTeacher = (name: string, subject: string) => {
+    const duplicate = teachers.some((teacher) => teacher.name.trim().toLowerCase() === name.trim().toLowerCase())
+    if (duplicate) return 'Guru dengan nama tersebut sudah terdaftar.'
+    const newTeacher = createTeacher(name, subject, teachers.length)
+    onTeachersChange([...teachers, newTeacher])
+    setShowDialog(false)
+    setCsvFeedback({ type: 'success', text: `${newTeacher.name} berhasil ditambahkan.` })
+    return undefined
+  }
+
+  const handleCsvUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    const result = parseTeacherCsv(await file.text(), teachers)
+    if (result.error) { setCsvFeedback({ type: 'error', text: result.error }); return }
+    if (result.teachers.length === 0) { setCsvFeedback({ type: 'error', text: 'Tidak ada baris guru baru yang dapat diimpor.' }); return }
+    onTeachersChange([...teachers, ...result.teachers])
+    setCsvFeedback({ type: 'success', text: `${result.teachers.length} guru berhasil diimpor${result.skipped ? `, ${result.skipped} baris dilewati` : ''}.` })
+  }
+
+  return <div className="page-wrap"><section className="welcome-row"><div><p className="eyebrow">Data sekolah</p><h1>Daftar guru</h1><p className="muted">Kelola guru yang masuk dalam pemantauan kinerja.</p></div><button className="primary-button" onClick={onNew}><Plus size={18} /> Penilaian baru</button></section><div className="panel table-panel"><div className="panel-head teacher-panel-head"><div><h2>{teachers.length} guru terdaftar</h2><p className="muted">Tambahkan satu guru atau impor data dari CSV.</p></div><div className="teacher-actions"><button className="secondary-button compact" onClick={() => setShowDialog(true)}><Plus size={16} /> Tambah guru</button><label className="secondary-button compact upload-button" htmlFor="teacher-csv-upload"><Upload size={15} /> Unggah CSV</label><input id="teacher-csv-upload" className="visually-hidden" type="file" accept=".csv,text/csv" onChange={handleCsvUpload} /><button className="template-button" onClick={downloadTeacherTemplate}><Download size={14} /> Template CSV</button></div></div>{csvFeedback && <div className={`csv-feedback ${csvFeedback.type}`} role="status">{csvFeedback.text}<button type="button" onClick={() => setCsvFeedback(null)} aria-label="Tutup pesan"><X size={14} /></button></div>}<div className="teacher-table"><div className="teacher-header"><span>Guru</span><span>Mata pelajaran</span><span>Penilaian</span><span>Status terbaru</span></div>{teachers.map((teacher) => { const items = assessments.filter((assessment) => assessment.teacherId === teacher.id); const latest = items[0]; return <div className="teacher-row" key={teacher.id}><div className="teacher-cell"><div className="avatar" style={{ background: teacher.color }}>{teacher.initials}</div><strong>{teacher.name}</strong></div><span>{teacher.subject}</span><span>{items.length} penilaian</span><span className={`status-text ${latest?.status === 'selesai' ? 'complete' : ''}`}>{latest ? latest.status === 'selesai' ? 'Selesai' : 'Draf' : 'Belum ada'}</span></div> })}</div></div>{showDialog && <TeacherDialog onClose={() => setShowDialog(false)} onSubmit={addTeacher} />}</div>
+}
+
+function TeacherDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (name: string, subject: string) => string | undefined }) {
+  const [name, setName] = useState('')
+  const [subject, setSubject] = useState('')
+  const [error, setError] = useState('')
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!name.trim() || !subject.trim()) { setError('Nama guru dan mata pelajaran wajib diisi.'); return } const message = onSubmit(name, subject); if (message) setError(message) }
+  return <div className="teacher-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><form className="teacher-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="teacher-modal-title"><div className="teacher-modal-head"><div><span className="eyebrow">Data sekolah</span><h2 id="teacher-modal-title">Tambah guru</h2><p className="muted">Masukkan identitas guru yang akan dipantau.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Tutup"><X size={18} /></button></div><div className="teacher-form-fields"><label>Nama guru<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: Siti Rahmawati, S.Pd." /></label><label>Mata pelajaran<input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Contoh: Bahasa Indonesia" /></label></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose}>Batal</button><button type="submit" className="primary-button compact"><Plus size={15} /> Tambahkan guru</button></div></form></div>
+}
+
+function createTeacher(name: string, subject: string, index: number): Teacher {
+  return { id: `teacher-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: name.trim(), subject: subject.trim(), initials: makeTeacherInitials(name), color: teacherColors[index % teacherColors.length] }
+}
+
+const teacherColors = ['#d9d5ff', '#d6f0e5', '#ffe3cd', '#d3e9f4', '#f3d7e9']
+
+function makeTeacherInitials(name: string) {
+  const words = name.replace(/[,.]/g, '').trim().split(/\s+/).filter(Boolean)
+  return (words.slice(0, 2).map((word) => word[0]).join('') || name.slice(0, 2)).toUpperCase()
+}
+
+function parseTeacherCsv(contents: string, existing: Teacher[]) {
+  const lines = contents.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim())
+  if (lines.length < 2) return { teachers: [] as Teacher[], skipped: 0, error: 'CSV harus memiliki baris header dan minimal satu data guru.' }
+  const delimiter = (lines[0].match(/;/g) ?? []).length > (lines[0].match(/,/g) ?? []).length ? ';' : ','
+  const headers = parseCsvLine(lines[0], delimiter).map((header) => header.toLowerCase().replace(/[^a-z0-9]/g, ''))
+  const nameIndex = headers.findIndex((header) => ['nama', 'namaguru', 'name'].includes(header))
+  const subjectIndex = headers.findIndex((header) => ['matapelajaran', 'mapel', 'subject'].includes(header))
+  const initialsIndex = headers.findIndex((header) => ['inisial', 'initials'].includes(header))
+  if (nameIndex < 0 || subjectIndex < 0) return { teachers: [] as Teacher[], skipped: 0, error: 'Header CSV wajib memuat kolom nama dan mata_pelajaran.' }
+  const knownNames = new Set(existing.map((teacher) => teacher.name.trim().toLowerCase()))
+  const imported: Teacher[] = []
+  let skipped = 0
+  lines.slice(1).forEach((line, index) => { const cells = parseCsvLine(line, delimiter); const name = cells[nameIndex]?.trim(); const subject = cells[subjectIndex]?.trim(); if (!name || !subject || knownNames.has(name.toLowerCase())) { skipped += 1; return } knownNames.add(name.toLowerCase()); imported.push({ id: `teacher-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`, name, subject, initials: cells[initialsIndex]?.trim().toUpperCase() || makeTeacherInitials(name), color: teacherColors[(existing.length + imported.length) % teacherColors.length] }) })
+  return { teachers: imported, skipped }
+}
+
+function parseCsvLine(line: string, delimiter: string) {
+  const cells: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let index = 0; index < line.length; index += 1) { const character = line[index]; const next = line[index + 1]; if (character === '"' && quoted && next === '"') { cell += '"'; index += 1 } else if (character === '"') quoted = !quoted; else if (character === delimiter && !quoted) { cells.push(cell); cell = '' } else cell += character }
+  cells.push(cell)
+  return cells
+}
+
+function downloadTeacherTemplate() {
+  const csv = 'nama,mata_pelajaran,inisial\nSiti Rahmawati,Bahasa Indonesia,SR\nBudi Santoso,Informatika,BS\n'
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'template-guru-smkn-pasirian.csv'
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 function Reports({ assessments, teachers, onOpen }: { assessments: Assessment[]; teachers: Teacher[]; onOpen: (assessment: Assessment) => void }) { const [query, setQuery] = useState(''); const filtered = assessments.filter((assessment) => teachers.find((teacher) => teacher.id === assessment.teacherId)?.name.toLowerCase().includes(query.toLowerCase())); return <div className="page-wrap"><section className="welcome-row"><div><p className="eyebrow">Dokumentasi</p><h1>Laporan supervisi</h1><p className="muted">Cari, tinjau, dan cetak hasil supervisi guru.</p></div></section><div className="panel table-panel"><div className="report-toolbar"><div className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama guru..." /></div><span className="muted">{filtered.length} laporan</span></div>{filtered.length === 0 ? <EmptyState onNew={() => undefined} /> : <div className="report-list">{filtered.map((assessment) => { const teacher = teachers.find((item) => item.id === assessment.teacherId); return <button className="report-row" key={assessment.id} onClick={() => onOpen(assessment)}><div className="file-icon"><FileText size={19} /></div><div><strong>{teacher?.name ?? 'Guru belum dipilih'}</strong><span>{assessment.period} · {assessment.subject || teacher?.subject || '—'} · diperbarui {formatDate(assessment.updatedAt)}</span></div><span className={`status-badge ${assessment.status}`}>{assessment.status === 'selesai' ? 'Selesai' : 'Draf'}</span><ArrowRight size={17} /></button> })}</div>}</div></div> }
 

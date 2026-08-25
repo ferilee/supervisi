@@ -7,6 +7,7 @@ import './mobile-nav.css'
 import './theme.css'
 import './progressive.css'
 import './fintech-theme.css'
+import './teacher-management.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
