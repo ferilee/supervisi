@@ -22,7 +22,7 @@
 .teacher-modal-head h2 { margin: 0 0 6px; color: #202238; font-size: 20px; }
 .teacher-form-fields { display: grid; gap: 15px; padding: 22px 24px 5px; }
 .teacher-form-fields label { display: flex; flex-direction: column; gap: 7px; color: #686d84; font-size: 12px; font-weight: 600; }
-.teacher-form-fields input { width: 100%; font-size: 13px; }
+.teacher-form-fields input, .teacher-form-fields select { width: 100%; font-size: 13px; }
 .form-error { margin: 12px 24px 0; color: #b35f54; font-size: 12px; }
 .teacher-modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 20px 24px 22px; }
 .supervisor-table { margin-top: 22px; }
