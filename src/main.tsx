@@ -12,6 +12,7 @@ import './print-report.css'
 import './post-tabs.css'
 import './settings.css'
 import './startup.css'
+import './notification.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

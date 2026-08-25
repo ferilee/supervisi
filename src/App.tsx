@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ArrowLeft, ArrowRight, BarChart3, Bell, BookOpenCheck, Check, ChevronDown, CircleAlert, ClipboardCheck,
   Download, FileDown, FileText, LayoutDashboard, Maximize2, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck,
@@ -108,7 +108,7 @@ function App() {
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Buka menu"><Menu size={22} /></button>
           <div className="breadcrumbs"><span>{settings.schoolName}</span><span className="slash">/</span><strong>{page === 'dashboard' ? 'Ringkasan' : page === 'assessment' ? 'Penilaian' : page === 'teachers' ? 'Daftar guru' : page === 'supervisors' ? 'Supervisor' : page === 'settings' ? 'Pengaturan' : 'Laporan'}</strong></div>
-          <div className="topbar-actions"><button className="icon-button" aria-label="Notifikasi"><Bell size={18} /><i /></button><div className="profile"><div className="avatar navy">KS</div><div><strong>Kepala Sekolah</strong><span>Administrator</span></div><ChevronDown size={16} /></div></div>
+          <div className="topbar-actions"><NotificationBell assessments={assessments} teachers={teachers} onOpen={editAssessment} onNew={startAssessment} /><div className="profile"><div className="avatar navy">KS</div><div><strong>Kepala Sekolah</strong><span>Administrator</span></div><ChevronDown size={16} /></div></div>
         </header>
         {page === 'dashboard' && <Dashboard assessments={assessments} teachers={teachers} onNew={startAssessment} onOpen={editAssessment} />}
         {page === 'teachers' && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} onTeachersChange={persistTeachers} />}
@@ -135,6 +135,59 @@ function SupervisorSetup({ teachers, onComplete }: { teachers: Teacher[]; onComp
 
 function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <span className="nav-pip" />}</button>
+}
+
+type AppNotification = { id: string; title: string; detail: string; assessmentId?: string; tone: 'warning' | 'info' | 'success' }
+
+function NotificationBell({ assessments, teachers, onOpen, onNew }: { assessments: Assessment[]; teachers: Teacher[]; onOpen: (assessment: Assessment) => void; onNew: () => void }) {
+  const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const notifications = buildNotifications(assessments, teachers)
+  useEffect(() => {
+    if (!open) return undefined
+    const closeOnOutsideClick = (event: MouseEvent) => { if (panelRef.current && !panelRef.current.contains(event.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [open])
+  const openNotification = (notification: AppNotification) => {
+    setOpen(false)
+    const assessment = notification.assessmentId ? assessments.find((item) => item.id === notification.assessmentId) : undefined
+    if (assessment) onOpen(assessment)
+    else onNew()
+  }
+  return <div className="notification-center" ref={panelRef}><button type="button" className="icon-button notification-trigger" aria-label={`${notifications.length} notifikasi`} aria-expanded={open} onClick={() => setOpen((current) => !current)}><Bell size={18} />{notifications.length > 0 && <span className="notification-badge">{notifications.length > 9 ? '9+' : notifications.length}</span>}</button>{open && <div className="notification-panel"><div className="notification-panel-head"><div><strong>Notifikasi</strong><span>{notifications.length ? `${notifications.length} hal perlu diperhatikan` : 'Semua sudah tertangani'}</span></div><button type="button" className="notification-close" onClick={() => setOpen(false)} aria-label="Tutup notifikasi"><X size={15} /></button></div>{notifications.length === 0 ? <div className="notification-empty"><Check size={20} /><span>Tidak ada pengingat baru.</span></div> : <div className="notification-list">{notifications.map((notification) => <button type="button" className="notification-item" key={notification.id} onClick={() => openNotification(notification)}><span className={`notification-item-icon ${notification.tone}`}>{notification.tone === 'success' ? <Check size={15} /> : <CircleAlert size={15} />}</span><span className="notification-item-copy"><strong>{notification.title}</strong><small>{notification.detail}</small></span><ArrowRight size={15} /></button>)}</div>}</div>}</div>
+}
+
+function buildNotifications(assessments: Assessment[], teachers: Teacher[]) {
+  if (assessments.length === 0) return [{ id: 'new-assessment', title: 'Belum ada penilaian', detail: 'Mulai penilaian kinerja guru pertama.', tone: 'info' as const }]
+  const notifications: AppNotification[] = []
+  assessments.slice(0, 20).forEach((assessment) => {
+    if (assessment.status === 'selesai') return
+    const teacherName = teachers.find((teacher) => teacher.id === assessment.teacherId)?.name ?? 'Guru belum dipilih'
+    const missing = getMissingObservationInfo(assessment)
+    const preDone = completedCount(preObservationItems, assessment.preObservation) === preObservationItems.length
+    const observationDone = completedCount(observationItems, assessment.observation) === observationItems.length
+    if (missing.length > 0) {
+      notifications.push({ id: `${assessment.id}-identity`, title: `Lengkapi informasi · ${teacherName}`, detail: missing.slice(0, 3).join(', '), assessmentId: assessment.id, tone: 'warning' })
+      return
+    }
+    if (assessment.currentStage === 'pra-observasi' && preDone) {
+      notifications.push({ id: `${assessment.id}-observation-ready`, title: `Observasi siap dimulai · ${teacherName}`, detail: 'Pra-observasi selesai. Buka penilaian untuk melanjutkan.', assessmentId: assessment.id, tone: 'success' })
+    } else if (assessment.currentStage === 'pra-observasi') {
+      notifications.push({ id: `${assessment.id}-pre`, title: `Pra-observasi belum selesai · ${teacherName}`, detail: `${completedCount(preObservationItems, assessment.preObservation)} dari ${preObservationItems.length} butir sudah dinilai.`, assessmentId: assessment.id, tone: 'warning' })
+    } else if (assessment.currentStage === 'observasi' && !observationDone) {
+      notifications.push({ id: `${assessment.id}-observation`, title: `Observasi perlu dituntaskan · ${teacherName}`, detail: `${completedCount(observationItems, assessment.observation)} dari ${observationItems.length} butir sudah dinilai.`, assessmentId: assessment.id, tone: 'warning' })
+    } else if (assessment.currentStage === 'observasi' && observationDone) {
+      notifications.push({ id: `${assessment.id}-post-ready`, title: `Pasca-observasi siap dimulai · ${teacherName}`, detail: 'Observasi selesai. Buka penilaian untuk mengisi refleksi dan tindak lanjut.', assessmentId: assessment.id, tone: 'success' })
+    } else if (assessment.currentStage === 'pasca-observasi') {
+      const reflectionDone = reflectionQuestions.every(([key]) => Boolean(assessment.reflection[key]?.trim()))
+      const feedbackDone = feedbackAspects.every((aspect) => Boolean(assessment.feedback[aspect]?.strength?.trim() && assessment.feedback[aspect]?.development?.trim()))
+      const followUpDone = assessment.followUps.every((item) => Boolean(item.action.trim()))
+      const detail = !reflectionDone ? 'Lengkapi refleksi guru.' : !feedbackDone ? 'Lengkapi umpan balik supervisor.' : !followUpDone ? 'Isi rencana tindak lanjut.' : 'Tandai penilaian sebagai selesai.'
+      notifications.push({ id: `${assessment.id}-post`, title: `Pasca-observasi perlu dituntaskan · ${teacherName}`, detail, assessmentId: assessment.id, tone: 'info' })
+    }
+  })
+  return notifications
 }
 
 function Dashboard({ assessments, teachers, onNew, onOpen }: { assessments: Assessment[]; teachers: Teacher[]; onNew: () => void; onOpen: (assessment: Assessment) => void }) {
