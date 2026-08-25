@@ -1,0 +1,347 @@
+.print-report {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 13mm 14mm 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  body {
+    color: #111 !important;
+  }
+
+  .app-shell,
+  .main-content,
+  .workspace-page {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .workspace-page > :not(.print-report),
+  .toast {
+    display: none !important;
+  }
+
+  .print-report {
+    display: block !important;
+    width: 100%;
+    color: #111;
+    background: #fff;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
+    line-height: 1.18;
+  }
+
+  .print-page {
+    display: block;
+    min-height: 255mm;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .print-heading {
+    text-align: center;
+    margin: 3mm 0 6mm;
+  }
+
+  .print-heading h1,
+  .print-heading h2,
+  .print-heading p,
+  .print-section-title,
+  .print-observation-group h3,
+  .print-summary-block h3,
+  .print-additional-notes h3,
+  .print-post-notes h3 {
+    color: #111;
+    font-family: "Times New Roman", Times, serif;
+  }
+
+  .print-heading h1 {
+    margin: 0;
+    font-size: 14pt;
+    line-height: 1.12;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .print-pre-page .print-heading h1 {
+    text-transform: none;
+  }
+
+  .print-heading h2 {
+    margin: 4mm 0 0;
+    font-size: 14pt;
+    line-height: 1.12;
+    font-weight: 700;
+  }
+
+  .print-heading p {
+    margin: 5mm 0 0;
+    text-align: left;
+    font-size: 11pt;
+    font-style: italic;
+  }
+
+  .print-fields {
+    width: 82%;
+    margin: 0 0 6mm;
+  }
+
+  .print-field {
+    display: grid;
+    grid-template-columns: 34mm 5mm 1fr;
+    min-height: 5.8mm;
+    align-items: baseline;
+  }
+
+  .print-field span,
+  .print-field b,
+  .print-field strong {
+    font-size: 10.5pt;
+  }
+
+  .print-field strong {
+    font-weight: 400;
+    border-bottom: 1px dotted #111;
+    min-height: 4.8mm;
+  }
+
+  .print-pre-page .print-field:first-child strong {
+    font-weight: 700;
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin: 0;
+    color: #111;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 9.5pt;
+  }
+
+  .print-table th,
+  .print-table td {
+    border: 1px solid #202020;
+    padding: 3.2mm 2.1mm;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .print-table th {
+    padding-top: 2mm;
+    padding-bottom: 2mm;
+    text-align: center;
+    vertical-align: middle;
+    font-weight: 700;
+  }
+
+  .print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-table tfoot tr {
+    break-inside: avoid;
+  }
+
+  .print-center,
+  .print-score {
+    text-align: center;
+  }
+
+  .print-score {
+    vertical-align: middle !important;
+    font-weight: 700;
+  }
+
+  .print-col-no {
+    width: 9mm;
+  }
+
+  .print-col-first {
+    width: 39mm;
+  }
+
+  .print-col-indicator {
+    width: auto;
+  }
+
+  .print-col-score {
+    width: 15mm;
+  }
+
+  .print-col-evidence {
+    width: 58mm;
+  }
+
+  .print-pre-table .print-col-first {
+    width: 38mm;
+  }
+
+  .print-pre-table .print-col-evidence {
+    width: 55mm;
+  }
+
+  .print-total-row td {
+    font-weight: 700;
+    vertical-align: middle;
+  }
+
+  .print-additional-notes,
+  .print-summary-block,
+  .print-post-notes {
+    margin-top: 7mm;
+  }
+
+  .print-section-title,
+  .print-observation-group h3,
+  .print-summary-block h3,
+  .print-additional-notes h3,
+  .print-post-notes h3 {
+    margin: 5mm 0 3mm;
+    font-size: 11pt;
+    font-weight: 700;
+  }
+
+  .print-observation-group {
+    margin-top: 6mm;
+  }
+
+  .print-observation-group h3 {
+    margin-top: 0;
+    margin-bottom: 3mm;
+  }
+
+  .print-observation-table .print-col-first {
+    width: 34mm;
+  }
+
+  .print-observation-table .print-col-evidence {
+    width: 49mm;
+  }
+
+  .print-scoring-guide {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5mm;
+    margin-top: 6mm;
+    padding-top: 3mm;
+    border-top: 1px solid #111;
+    font-size: 9pt;
+  }
+
+  .print-scoring-guide strong {
+    margin-right: 3mm;
+  }
+
+  .print-ruled-box {
+    min-height: 17mm;
+    white-space: pre-wrap;
+    border: 1px solid #202020;
+    padding: 2.5mm;
+  }
+
+  .print-note-block {
+    margin: 4mm 0;
+  }
+
+  .print-note-block strong {
+    display: block;
+    margin-bottom: 2mm;
+    font-weight: 400;
+  }
+
+  .print-note-block .print-ruled-box {
+    min-height: 12mm;
+  }
+
+  .print-signature {
+    width: 67mm;
+    text-align: center;
+    margin-top: 10mm;
+  }
+
+  .print-signature strong,
+  .print-signature span {
+    display: block;
+    font-size: 10pt;
+  }
+
+  .signature-space {
+    height: 18mm;
+  }
+
+  .print-date-line {
+    margin-top: 8mm;
+    text-align: right;
+  }
+
+  .print-signatures {
+    display: flex;
+    justify-content: space-between;
+    gap: 25mm;
+    margin-top: 3mm;
+  }
+
+  .print-signatures .print-signature {
+    flex: 1;
+    margin-top: 0;
+  }
+
+  .print-reflection-table .print-col-post-no,
+  .print-feedback-table .print-col-post-no,
+  .print-followup-table .print-col-post-no {
+    width: 10mm;
+  }
+
+  .print-reflection-table .print-col-question {
+    width: 71mm;
+  }
+
+  .print-reflection-table .print-col-answer {
+    width: auto;
+  }
+
+  .print-feedback-table .print-col-feedback-aspect {
+    width: 39mm;
+  }
+
+  .print-feedback-table .print-col-feedback {
+    width: auto;
+  }
+
+  .print-followup-table .print-col-followup-aspect {
+    width: 32mm;
+  }
+
+  .print-followup-table .print-col-action {
+    width: 54mm;
+  }
+
+  .print-followup-table .print-col-owner {
+    width: 32mm;
+  }
+
+  .print-followup-table .print-col-date {
+    width: 28mm;
+  }
+}
