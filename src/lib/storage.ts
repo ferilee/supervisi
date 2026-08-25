@@ -5,12 +5,7 @@ const TEACHERS_KEY = 'supervisi-teachers-v1'
 const SUPERVISORS_KEY = 'supervisi-supervisors-v1'
 const SETTINGS_KEY = 'supervisi-settings-v1'
 
-export const defaultTeachers: Teacher[] = [
-  { id: 't-1', name: 'Siti Rahmawati, S.Pd.', subject: 'Bahasa Indonesia', initials: 'SR', color: '#b9e3d5' },
-  { id: 't-2', name: 'Budi Santoso, S.Kom.', subject: 'Informatika', initials: 'BS', color: '#c7d8f8' },
-  { id: 't-3', name: 'Dewi Lestari, S.Pd.', subject: 'Matematika', initials: 'DL', color: '#f7d7b4' },
-  { id: 't-4', name: 'Ahmad Fauzan, S.Pd.', subject: 'Teknik Pemesinan', initials: 'AF', color: '#e7c5ed' },
-]
+export const defaultTeachers: Teacher[] = []
 
 export const defaultSupervisors: Supervisor[] = [
   { id: 's-1', name: 'Kepala Sekolah', position: 'Kepala Sekolah', active: true },
@@ -37,7 +32,7 @@ function read<T>(key: string, fallback: T): T {
 }
 
 export function getTeachers() {
-  return read<Teacher[]>(TEACHERS_KEY, defaultTeachers)
+  return read<Teacher[]>(TEACHERS_KEY, defaultTeachers).map((teacher) => ({ ...teacher, active: teacher.active !== false }))
 }
 
 export function saveTeachers(teachers: Teacher[]) {

@@ -15,6 +15,15 @@
 .csv-feedback.success { background: #e4f7ed; color: #2f8d69; }
 .csv-feedback.error { background: #fff0ed; color: #b35f54; }
 .csv-feedback button { display: grid; place-items: center; padding: 2px; border: 0; background: transparent; color: currentColor; }
+.teacher-table .teacher-header,
+.teacher-table .teacher-row { grid-template-columns: 1.45fr 1fr .65fr .75fr auto; }
+.teacher-row.archived { background: #fbfafc; }
+.teacher-empty { padding: 24px 10px; border-top: 1px solid #edf1f0; color: #9aa7a8; font-size: 12px; text-align: center; }
+.status-text.archived { color: #8f879f; }
+.teacher-actions-cell { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.teacher-actions-cell .secondary-button { white-space: nowrap; }
+.danger-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 8px; border: 1px solid #f0d6d5; border-radius: 7px; background: #fff4f3; color: #b35f54; }
+.danger-button:hover { background: #ffe9e7; border-color: #e9b8b5; }
 .teacher-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(25, 28, 52, .55); backdrop-filter: blur(4px); }
 .teacher-modal { width: min(520px, 100%); border: 1px solid rgba(255,255,255,.72); border-radius: 18px; background: #ffffff; box-shadow: 0 24px 70px rgba(24, 27, 57, .25); }
 .teacher-modal-head { display: flex; justify-content: space-between; gap: 15px; padding: 22px 24px 17px; border-bottom: 1px solid #ececf2; }
@@ -49,4 +58,12 @@
   .supervisor-row > span:nth-child(2) { grid-column: 1; }
   .supervisor-row > span:nth-child(3) { grid-column: 1; grid-row: 2; }
   .supervisor-row .supervisor-toggle { grid-column: 2; grid-row: 1 / span 2; }
+  .teacher-table .teacher-header,
+  .teacher-table .teacher-row { grid-template-columns: 1.6fr 1fr auto; gap: 7px; }
+  .teacher-table .teacher-header span:nth-child(3),
+  .teacher-table .teacher-header span:nth-child(4),
+  .teacher-table .teacher-row > span:nth-child(3),
+  .teacher-table .teacher-row > span:nth-child(4) { display: none; }
+  .teacher-actions-cell { flex-direction: column; align-items: stretch; }
+  .teacher-actions-cell .secondary-button { padding: 7px 6px; }
 }

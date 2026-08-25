@@ -10,8 +10,11 @@ create table if not exists public.teachers (
   subject text not null,
   initials text not null,
   color text not null,
+  active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+alter table public.teachers add column if not exists active boolean not null default true;
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,

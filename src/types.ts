@@ -19,6 +19,7 @@ export interface Teacher {
   subject: string
   initials: string
   color: string
+  active?: boolean
 }
 
 export interface Supervisor {

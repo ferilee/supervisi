@@ -77,8 +77,9 @@ export async function signIn({ username, password, role, teacherId, supervisors,
     const email = `${normalize(username)}@auth.smknpasirian.local`
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.user) throw new Error('Username atau password tidak sesuai.')
-    const { data: profile, error: profileError } = await supabase.from('profiles').select('id, username, display_name, role, teacher_id, must_change_password').eq('id', data.user.id).single()
-    if (profileError || !profile || profile.role !== role || (role === 'guru' && teacherId && profile.teacher_id !== teacherId)) throw new Error('Profil akun belum dikonfigurasi dengan benar.')
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id, username, display_name, role, teacher_id, must_change_password, active').eq('id', data.user.id).single()
+    if (profileError || !profile || !profile.active) throw new Error('Akun ini sudah dinonaktifkan oleh Admin.')
+    if (profile.role !== role || (role === 'guru' && teacherId && profile.teacher_id !== teacherId)) throw new Error('Profil akun belum dikonfigurasi dengan benar.')
     return saveSession({ userId: profile.id, username: profile.username, displayName: profile.display_name, role: profile.role, teacherId: profile.teacher_id ?? undefined, mustChangePassword: profile.must_change_password, backend: 'supabase' })
   }
 
@@ -93,6 +94,7 @@ export async function signIn({ username, password, role, teacherId, supervisors,
   }
   const account = getLocalAccounts().find((item) => item.role === role && normalize(item.username) === normalize(username) && item.password === password && (!teacherId || item.teacherId === teacherId))
   if (!account) throw new Error('Username atau password tidak sesuai.')
+  if (role === 'supervisor' && !supervisors.some((supervisor) => supervisor.id === account.userId && supervisor.active)) throw new Error('Akun supervisor ini sudah dinonaktifkan oleh Admin.')
   const { password: _password, ...session } = account
   return saveSession(session)
 }
