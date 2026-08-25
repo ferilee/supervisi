@@ -22,6 +22,7 @@ export interface AppSettings {
   defaultPeriod: string
   signatureCity: string
   signatureDetail: string
+  supervisorSetupComplete: boolean
 }
 
 export interface RubricItem {

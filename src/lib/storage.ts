@@ -21,6 +21,7 @@ export const defaultSettings: AppSettings = {
   defaultPeriod: '2026',
   signatureCity: 'Pasirian',
   signatureDetail: 'Kepala Sekolah & Pendamping Sekolah',
+  supervisorSetupComplete: false,
 }
 
 function read<T>(key: string, fallback: T): T {

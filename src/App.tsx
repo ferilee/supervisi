@@ -24,6 +24,7 @@ const freshAssessment = (teacherId = '', observer = defaultSupervisors[0]?.name 
 
 function App() {
   const [page, setPage] = useState<AppPage>('dashboard')
+  const [isBooting, setIsBooting] = useState(true)
   const [mobileNav, setMobileNav] = useState(false)
   const [teachers, setTeachers] = useState<Teacher[]>(() => getTeachers())
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => getSupervisors())
@@ -62,6 +63,26 @@ function App() {
     setMobileNav(false)
   }
 
+  useEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const timer = window.setTimeout(() => setIsBooting(false), reducedMotion ? 80 : 720)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const completeSupervisorSetup = (teacherId: string) => {
+    const teacher = teachers.find((item) => item.id === teacherId)
+    if (!teacher) return
+    const existing = supervisors.find((item) => item.name.trim().toLowerCase() === teacher.name.trim().toLowerCase())
+    const selected: Supervisor = existing ?? { id: `supervisor-${Date.now()}`, name: teacher.name, position: 'Supervisor', active: true }
+    const nextSupervisors = [{ ...selected, active: true }, ...supervisors.filter((item) => item.id !== selected.id).map((item) => item.id === 's-1' && item.name === 'Kepala Sekolah' ? { ...item, active: false } : item)]
+    const nextSettings = { ...settings, supervisorSetupComplete: true }
+    persistSupervisors(nextSupervisors)
+    persistSettings(nextSettings)
+  }
+
+  if (isBooting) return <LoadingScreen schoolName={settings.schoolName} />
+  if (!settings.supervisorSetupComplete) return <SupervisorSetup teachers={teachers} onComplete={completeSupervisorSetup} />
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'is-open' : ''}`}>
@@ -99,6 +120,17 @@ function App() {
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
   )
+}
+
+function LoadingScreen({ schoolName }: { schoolName: string }) {
+  return <div className="startup-screen loading-screen"><div className="startup-brand"><div className="startup-mark"><ShieldCheck size={26} /></div><strong>supervisi</strong><span>{schoolName}</span></div><div className="loading-indicator" aria-label="Memuat aplikasi"><i /></div><p>Menyiapkan ruang supervisi...</p></div>
+}
+
+function SupervisorSetup({ teachers, onComplete }: { teachers: Teacher[]; onComplete: (teacherId: string) => void }) {
+  const [teacherId, setTeacherId] = useState('')
+  const [error, setError] = useState('')
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!teacherId) { setError('Pilih nama supervisor terlebih dahulu.'); return } onComplete(teacherId) }
+  return <div className="startup-screen setup-screen"><div className="setup-card"><div className="startup-mark"><ShieldCheck size={26} /></div><p className="eyebrow">Penyiapan awal</p><h1>Selamat datang di supervisi</h1><p className="setup-intro">Sebelum membuka dashboard, tentukan nama supervisor yang akan digunakan pada penilaian.</p><form onSubmit={submit}><label>Nama supervisor<select autoFocus value={teacherId} onChange={(event) => { setTeacherId(event.target.value); setError('') }} disabled={teachers.length === 0}><option value="">{teachers.length ? 'Pilih nama guru...' : 'Belum ada guru terdaftar'}</option>{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label>{teachers.length === 0 && <p className="setup-error">Tambahkan guru terlebih dahulu agar nama supervisor dapat dipilih.</p>}{error && <p className="setup-error">{error}</p>}<button type="submit" className="primary-button" disabled={!teachers.length}><Check size={17} /> Simpan & buka dashboard</button></form><small>Nama ini dapat dikelola kembali melalui menu Supervisor.</small></div></div>
 }
 
 function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {

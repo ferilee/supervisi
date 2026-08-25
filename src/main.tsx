@@ -11,6 +11,7 @@ import './teacher-management.css'
 import './print-report.css'
 import './post-tabs.css'
 import './settings.css'
+import './startup.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
