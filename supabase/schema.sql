@@ -6,6 +6,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.teachers (
   id uuid primary key default gen_random_uuid(),
+  legacy_id text unique,
   name text not null,
   subject text not null,
   initials text not null,
@@ -15,6 +16,23 @@ create table if not exists public.teachers (
 );
 
 alter table public.teachers add column if not exists active boolean not null default true;
+alter table public.teachers add column if not exists legacy_id text;
+create unique index if not exists teachers_legacy_id_idx on public.teachers (legacy_id);
+
+create table if not exists public.supervisors (
+  id uuid primary key default gen_random_uuid(),
+  legacy_id text unique,
+  teacher_id uuid references public.teachers(id) on delete set null,
+  name text not null,
+  position text not null default '',
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+alter table public.supervisors add column if not exists legacy_id text;
+alter table public.supervisors add column if not exists teacher_id uuid references public.teachers(id) on delete set null;
+alter table public.supervisors add column if not exists active boolean not null default true;
+create unique index if not exists supervisors_legacy_id_idx on public.supervisors (legacy_id);
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -35,7 +53,8 @@ create unique index if not exists profiles_teacher_unique_idx on public.profiles
 
 create table if not exists public.assessments (
   id uuid primary key default gen_random_uuid(),
-  teacher_id uuid not null references public.teachers(id) on delete restrict,
+  legacy_id text unique,
+  teacher_id uuid references public.teachers(id) on delete restrict,
   period text not null,
   class_name text not null default '',
   subject text not null default '',
@@ -54,6 +73,10 @@ create table if not exists public.assessments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.assessments add column if not exists legacy_id text;
+alter table public.assessments alter column teacher_id drop not null;
+create unique index if not exists assessments_legacy_id_idx on public.assessments (legacy_id);
 
 create table if not exists public.school_settings (
   id boolean primary key default true check (id),
@@ -105,6 +128,7 @@ as $$
 $$;
 
 alter table public.teachers enable row level security;
+alter table public.supervisors enable row level security;
 alter table public.profiles enable row level security;
 alter table public.assessments enable row level security;
 alter table public.school_settings enable row level security;
@@ -115,6 +139,15 @@ create policy teachers_select_by_role on public.teachers for select to authentic
 
 drop policy if exists teachers_manage_admin on public.teachers;
 create policy teachers_manage_admin on public.teachers for all to authenticated
+  using (public.current_role() = 'admin')
+  with check (public.current_role() = 'admin');
+
+drop policy if exists supervisors_select_staff on public.supervisors;
+create policy supervisors_select_staff on public.supervisors for select to authenticated
+  using (public.current_role() in ('admin', 'supervisor'));
+
+drop policy if exists supervisors_manage_admin on public.supervisors;
+create policy supervisors_manage_admin on public.supervisors for all to authenticated
   using (public.current_role() = 'admin')
   with check (public.current_role() = 'admin');
 

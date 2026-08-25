@@ -39,6 +39,17 @@
 .supervisor-header { padding: 0 10px 10px; color: #9aa7a8; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
 .supervisor-row { padding: 13px 10px; border-top: 1px solid #edf1f0; color: #687d82; font-size: 11px; }
 .supervisor-toggle { min-width: 83px; justify-content: center; }
+.migration-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 20px 24px 0; }
+.migration-summary span { padding: 12px 8px; border-radius: 10px; background: #f5f4ff; color: #77749a; font-size: 11px; text-align: center; }
+.migration-summary strong { display: block; margin-bottom: 3px; color: #5d50e8; font-size: 18px; }
+.teacher-modal > .muted { margin: 15px 24px 0; font-size: 11px; line-height: 1.55; }
+.migration-result { position: fixed; z-index: 120; right: 22px; bottom: 22px; display: flex; align-items: flex-start; gap: 15px; width: min(390px, calc(100vw - 32px)); padding: 15px 16px; border: 1px solid #ccebdc; border-radius: 13px; background: #f0fbf5; color: #338262; box-shadow: 0 14px 35px rgba(45, 126, 93, .16); }
+.migration-result > div { flex: 1; min-width: 0; }
+.migration-result strong, .migration-result span, .migration-result small { display: block; }
+.migration-result strong { color: #237252; font-size: 12px; }
+.migration-result span, .migration-result small { margin-top: 4px; font-size: 11px; line-height: 1.45; }
+.migration-result small { color: #6e9582; }
+.migration-result > button { display: grid; place-items: center; padding: 3px; border: 0; background: transparent; color: currentColor; }
 
 @media (max-width: 650px) {
   .observation-info-required { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
@@ -53,6 +64,7 @@
   .teacher-modal-head, .teacher-form-fields { padding-left: 18px; padding-right: 18px; }
   .teacher-modal-footer { padding: 18px; }
   .teacher-modal-footer button { flex: 1; justify-content: center; }
+  .migration-summary { margin-left: 18px; margin-right: 18px; }
   .supervisor-header { display: none; }
   .supervisor-row { grid-template-columns: 1fr auto; gap: 8px; padding: 13px 5px; }
   .supervisor-row > span:nth-child(2) { grid-column: 1; }

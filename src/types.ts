@@ -15,6 +15,7 @@ export interface AuthSession {
 
 export interface Teacher {
   id: string
+  legacyId?: string
   name: string
   subject: string
   initials: string
@@ -24,6 +25,8 @@ export interface Teacher {
 
 export interface Supervisor {
   id: string
+  legacyId?: string
+  teacherId?: string
   name: string
   position: string
   active: boolean
@@ -62,6 +65,7 @@ export interface FollowUp {
 
 export interface Assessment {
   id: string
+  legacyId?: string
   teacherId: string
   period: string
   className: string

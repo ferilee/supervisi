@@ -5,9 +5,10 @@ import {
   Sparkles, Trash2, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { feedbackAspects, followUpAspects, observationItems, preObservationItems, reflectionQuestions, scoreLabels } from './data/instrument'
-import { bootstrapLocalAccounts, changePassword, getStoredSession, isBackendConfigured, signIn, signOut } from './lib/auth'
+import { bootstrapLocalAccounts, changePassword, getStoredSession, isBackendConfigured, signIn, signOut, supabase } from './lib/auth'
 import { averageScore, completedCount, totalScore } from './lib/scoring'
-import { defaultSettings, defaultSupervisors, getAssessments, getSettings, getSupervisors, getTeachers, makeId, saveAssessments, saveSettings, saveSupervisors, saveTeachers } from './lib/storage'
+import { defaultSettings, defaultSupervisors, getAssessments, getLocalDataSnapshot, getSettings, getSupervisors, getTeachers, hasCompletedLocalMigration, hasLocalData, makeId, markLocalMigrationCompleted } from './lib/storage'
+import { createDataRepository, type MigrationResult } from './lib/data-repository'
 import type { AppPage, AppSettings, Assessment, AuthSession, RubricItem, ScoredResponse, Score, Stage, Supervisor, Teacher, UserRole } from './types'
 
 const steps: Array<{ id: Stage; label: string; short: string }> = [
@@ -32,26 +33,79 @@ function App() {
   const [settings, setSettings] = useState<AppSettings>(() => getSettings())
   const [assessments, setAssessments] = useState<Assessment[]>(() => getAssessments())
   const [session, setSession] = useState<AuthSession | null>(() => getStoredSession())
+  const [dataReady, setDataReady] = useState(() => !isBackendConfigured || !getStoredSession())
+  const [dataError, setDataError] = useState('')
+  const [showMigration, setShowMigration] = useState(false)
+  const [migrationBusy, setMigrationBusy] = useState(false)
+  const [migrationResult, setMigrationResult] = useState<MigrationResult | null>(null)
   const [active, setActive] = useState<Assessment | null>(null)
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState('')
   const [showPasswordChange, setShowPasswordChange] = useState(false)
+  const repository = useRef(createDataRepository(supabase)).current
 
-  const persistAssessment = (next: Assessment, message = 'Perubahan tersimpan') => {
-    const updated = { ...next, updatedAt: new Date().toISOString() }
-    const nextList = [updated, ...assessments.filter((item) => item.id !== updated.id)]
-    setAssessments(nextList)
-    saveAssessments(nextList)
-    setActive(updated)
-    setToast(message)
-    window.setTimeout(() => setToast(''), 2600)
+  const persistAssessment = async (next: Assessment, message = 'Perubahan tersimpan') => {
+    try {
+      const updated = await repository.saveAssessment({ ...next, updatedAt: new Date().toISOString() })
+      const nextList = [updated, ...assessments.filter((item) => item.id !== updated.id && item.id !== next.id)]
+      setAssessments(nextList)
+      setActive(updated)
+      setToast(message)
+      window.setTimeout(() => setToast(''), 2600)
+    } catch (reason) {
+      setToast(reason instanceof Error ? reason.message : 'Perubahan gagal disimpan.')
+    }
   }
 
-  const persistTeachers = (next: Teacher[]) => { setTeachers(next); saveTeachers(next) }
-  const persistSupervisors = (next: Supervisor[]) => { setSupervisors(next); saveSupervisors(next) }
-  const persistSettings = (next: AppSettings) => { setSettings(next); saveSettings(next) }
+  const persistTeachers = async (next: Teacher[], removedId?: string) => {
+    try {
+      const saved = await repository.saveTeachers(next)
+      if (removedId) await repository.deleteTeacher(removedId)
+      setTeachers(saved)
+    } catch (reason) { const error = reason instanceof Error ? reason : new Error('Data guru gagal disimpan.'); setToast(error.message); throw error }
+  }
+  const persistSupervisors = async (next: Supervisor[]) => {
+    try { setSupervisors(await repository.saveSupervisors(next)) } catch (reason) { const error = reason instanceof Error ? reason : new Error('Data supervisor gagal disimpan.'); setToast(error.message); throw error }
+  }
+  const persistSettings = async (next: AppSettings) => {
+    try { setSettings(await repository.saveSettings(next)) } catch (reason) { const error = reason instanceof Error ? reason : new Error('Pengaturan gagal disimpan.'); setToast(error.message); throw error }
+  }
+
+  const loadRemoteData = async (nextSession: AuthSession) => {
+    if (nextSession.backend !== 'supabase') { setDataReady(true); return }
+    setDataReady(false)
+    setDataError('')
+    try {
+      const loaded = await repository.load(nextSession.role)
+      setTeachers(loaded.teachers)
+      setSupervisors(loaded.supervisors)
+      setAssessments(loaded.assessments)
+      setSettings(loaded.settings)
+      setDataReady(true)
+      if (nextSession.role === 'admin' && hasLocalData() && !hasCompletedLocalMigration()) setShowMigration(true)
+    } catch (reason) {
+      setDataError(reason instanceof Error ? reason.message : 'Data Supabase gagal dimuat.')
+      setDataReady(true)
+    }
+  }
+
+  const migrateLocalData = async () => {
+    if (!session || session.backend !== 'supabase') return
+    setMigrationBusy(true)
+    try {
+      const result = await repository.migrate(getLocalDataSnapshot())
+      const loaded = await repository.load(session.role)
+      setTeachers(loaded.teachers); setSupervisors(loaded.supervisors); setAssessments(loaded.assessments); setSettings(loaded.settings)
+      markLocalMigrationCompleted()
+      setMigrationResult(result)
+      setShowMigration(false)
+    } catch (reason) {
+      setToast(reason instanceof Error ? reason.message : 'Migrasi data gagal.')
+    } finally { setMigrationBusy(false) }
+  }
 
   useEffect(() => { bootstrapLocalAccounts(supervisors) }, [supervisors])
+  useEffect(() => { if (session) void loadRemoteData(session) }, [session?.userId])
 
   const startAssessment = () => {
     setActive(freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod))
@@ -82,20 +136,23 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [])
 
-  const completeSupervisorSetup = (teacherId: string) => {
+  const completeSupervisorSetup = async (teacherId: string) => {
     const teacher = teachers.find((item) => item.id === teacherId)
     if (!teacher) return
     const existing = supervisors.find((item) => item.name.trim().toLowerCase() === teacher.name.trim().toLowerCase())
     const selected: Supervisor = existing ?? { id: `supervisor-${Date.now()}`, name: teacher.name, position: 'Supervisor', active: true }
     const nextSupervisors = [{ ...selected, active: true }, ...supervisors.filter((item) => item.id !== selected.id).map((item) => item.id === 's-1' && item.name === 'Kepala Sekolah' ? { ...item, active: false } : item)]
     const nextSettings = { ...settings, supervisorSetupComplete: true }
-    persistSupervisors(nextSupervisors)
-    persistSettings(nextSettings)
+    await persistSupervisors(nextSupervisors)
+    await persistSettings(nextSettings)
   }
 
   if (isBooting) return <LoadingScreen schoolName={settings.schoolName} />
   if (!session) return <LoginScreen teachers={teachers} backendConfigured={isBackendConfigured} onSubmit={handleSignIn} />
+  if (!dataReady) return <DataLoadingScreen schoolName={settings.schoolName} />
+  if (dataError) return <DataErrorScreen message={dataError} onRetry={() => void loadRemoteData(session)} onSignOut={handleSignOut} />
   if (session.mustChangePassword || showPasswordChange) return <PasswordChangeScreen session={session} supervisors={supervisors} required={session.mustChangePassword} onComplete={(nextSession) => { setSession(nextSession); setShowPasswordChange(false) }} onCancel={() => setShowPasswordChange(false)} onSignOut={handleSignOut} />
+  if (showMigration && session.role === 'admin') return <DataMigrationDialog busy={migrationBusy} onMigrate={migrateLocalData} onClose={() => setShowMigration(false)} />
   if (!settings.supervisorSetupComplete && session.role === 'admin' && teachers.some((teacher) => teacher.active !== false)) return <SupervisorSetup teachers={teachers} onComplete={completeSupervisorSetup} />
 
   const isAdmin = session.role === 'admin'
@@ -139,6 +196,7 @@ function App() {
         {page === 'assessment' && <AssessmentWorkspace assessment={active ?? visibleAssessments[0] ?? freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod)} teachers={visibleTeachers} supervisors={supervisors} settings={settings} readOnly={isGuru} onBack={() => navigate(isGuru ? 'reports' : 'dashboard')} onSave={persistAssessment} />}
       </main>
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
+      {migrationResult && <MigrationResultNotice result={migrationResult} onClose={() => setMigrationResult(null)} />}
     </div>
   )
 }
@@ -149,10 +207,27 @@ function LoadingScreen({ schoolName }: { schoolName: string }) {
   return <div className="startup-screen loading-screen"><div className="startup-brand"><div className="startup-mark"><ShieldCheck size={26} /></div><strong>supervisi</strong><span>{schoolName}</span></div><div className="loading-indicator" aria-label="Memuat aplikasi"><i /></div><p>Menyiapkan ruang supervisi...</p></div>
 }
 
-function SupervisorSetup({ teachers, onComplete }: { teachers: Teacher[]; onComplete: (teacherId: string) => void }) {
+function DataLoadingScreen({ schoolName }: { schoolName: string }) {
+  return <div className="startup-screen loading-screen"><div className="startup-brand"><div className="startup-mark"><ShieldCheck size={26} /></div><strong>supervisi</strong><span>{schoolName}</span></div><div className="loading-indicator" aria-label="Memuat data"><i /></div><p>Mengambil data dari Supabase...</p></div>
+}
+
+function DataErrorScreen({ message, onRetry, onSignOut }: { message: string; onRetry: () => void; onSignOut: () => Promise<void> }) {
+  return <div className="startup-screen setup-screen"><div className="setup-card"><div className="startup-mark"><CircleAlert size={26} /></div><p className="eyebrow">Koneksi data</p><h1>Data belum dapat dimuat</h1><p className="setup-intro">Aplikasi produksi tidak menggunakan data lokal sebagai pengganti agar data antar-browser tetap konsisten.</p><p className="setup-error" role="alert">{message}</p><div className="teacher-modal-footer"><button className="secondary-button compact" onClick={() => void onSignOut()}>Keluar</button><button className="primary-button compact" onClick={onRetry}><RotateCcw size={16} /> Coba lagi</button></div></div></div>
+}
+
+function DataMigrationDialog({ busy, onMigrate, onClose }: { busy: boolean; onMigrate: () => Promise<void>; onClose: () => void }) {
+  const local = getLocalDataSnapshot()
+  return <div className="teacher-modal-backdrop" role="presentation"><div className="teacher-modal" role="dialog" aria-modal="true" aria-labelledby="migration-title"><div className="teacher-modal-head"><div><span className="eyebrow">Sinkronisasi data</span><h2 id="migration-title">Pindahkan data browser lama?</h2><p className="muted">Data lokal ditemukan di browser ini. Pindahkan ke Supabase agar dapat dibuka dari browser atau perangkat lain.</p></div><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Tutup"><X size={18} /></button></div><div className="migration-summary"><span><strong>{local.teachers.length}</strong> guru</span><span><strong>{local.supervisors.length}</strong> supervisor</span><span><strong>{local.assessments.length}</strong> penilaian</span></div><p className="muted">Data server yang sudah ada akan dipertahankan. Data lokal hanya ditambahkan jika belum ditemukan, tanpa menghapus cadangan lokal.</p><div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose} disabled={busy}>Nanti</button><button type="button" className="primary-button compact" onClick={() => void onMigrate()} disabled={busy}>{busy ? 'Memindahkan...' : 'Migrasikan ke Supabase'}</button></div></div></div>
+}
+
+function MigrationResultNotice({ result, onClose }: { result: MigrationResult; onClose: () => void }) {
+  return <div className="migration-result" role="status"><div><strong>Sinkronisasi selesai</strong><span>{result.teachersAdded} guru, {result.supervisorsAdded} supervisor, dan {result.assessmentsAdded} penilaian ditambahkan.</span>{(result.skippedAssessments || result.skippedSupervisors) > 0 && <small>{result.skippedAssessments + result.skippedSupervisors} data dilewati karena sudah ada atau relasinya tidak ditemukan.</small>}</div><button type="button" onClick={onClose} aria-label="Tutup notifikasi"><X size={16} /></button></div>
+}
+
+function SupervisorSetup({ teachers, onComplete }: { teachers: Teacher[]; onComplete: (teacherId: string) => Promise<void> }) {
   const [teacherId, setTeacherId] = useState('')
   const [error, setError] = useState('')
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!teacherId) { setError('Pilih nama supervisor terlebih dahulu.'); return } onComplete(teacherId) }
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!teacherId) { setError('Pilih nama supervisor terlebih dahulu.'); return } try { await onComplete(teacherId) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Supervisor gagal disimpan.') } }
   const activeTeachers = teachers.filter((teacher) => teacher.active !== false)
   return <div className="startup-screen setup-screen"><div className="setup-card"><div className="startup-mark"><ShieldCheck size={26} /></div><p className="eyebrow">Penyiapan awal</p><h1>Selamat datang di supervisi</h1><p className="setup-intro">Sebelum membuka dashboard, tentukan nama supervisor yang akan digunakan pada penilaian.</p><form onSubmit={submit}><label>Nama supervisor<select autoFocus value={teacherId} onChange={(event) => { setTeacherId(event.target.value); setError('') }} disabled={activeTeachers.length === 0}><option value="">{activeTeachers.length ? 'Pilih nama guru...' : 'Belum ada guru terdaftar'}</option>{activeTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label>{activeTeachers.length === 0 && <p className="setup-error">Tambahkan guru terlebih dahulu agar nama supervisor dapat dipilih.</p>}{error && <p className="setup-error">{error}</p>}<button type="submit" className="primary-button" disabled={!activeTeachers.length}><Check size={17} /> Simpan & buka dashboard</button></form><small>Nama ini dapat dikelola kembali melalui menu Supervisor.</small></div></div>
 }
@@ -164,17 +239,18 @@ function LoginScreen({ teachers, backendConfigured, onSubmit }: { teachers: Teac
   const [teacherId, setTeacherId] = useState('')
   const [error, setError] = useState('')
   const selectedTeacher = teachers.find((teacher) => teacher.id === teacherId)
+  const backendGuruLogin = backendConfigured && role === 'guru'
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
     try {
-      await onSubmit({ username: role === 'guru' ? usernameFromName(selectedTeacher?.name ?? '') : username, password, role, teacherId: role === 'guru' ? teacherId : undefined })
+      await onSubmit({ username: role === 'guru' && !backendGuruLogin ? usernameFromName(selectedTeacher?.name ?? '') : username, password, role, teacherId: role === 'guru' && !backendGuruLogin ? teacherId : undefined })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Login gagal. Periksa kembali data akun.')
     }
   }
   const activeTeachers = teachers.filter((teacher) => teacher.active !== false)
-  return <div className="startup-screen login-screen"><div className="login-card"><div className="startup-mark"><ShieldCheck size={26} /></div><p className="eyebrow">Akses ruang supervisi</p><h1>Masuk ke supervisi</h1><p className="setup-intro">Pilih peran sesuai akun untuk membuka data yang tersedia.</p><form onSubmit={submit}><label>Peran<select value={role} onChange={(event) => { const nextRole = event.target.value as UserRole; setRole(nextRole); setUsername(''); setPassword(''); setTeacherId(''); setError('') }}><option value="admin">Admin</option><option value="supervisor">Supervisor</option><option value="guru">Guru · baca saja</option></select></label>{role === 'guru' ? <label>Nama guru<select autoFocus value={teacherId} onChange={(event) => { const nextTeacherId = event.target.value; setTeacherId(nextTeacherId); setUsername(''); setError('') }}><option value="">Pilih nama Anda...</option>{activeTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label> : <label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder={role === 'supervisor' ? 'Contoh: Nurdiana' : 'Masukkan username admin'} autoComplete="username" /></label>}{(role !== 'guru' || backendConfigured) && <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Masukkan password" autoComplete="current-password" /></label>}{role === 'guru' && <p className="login-readonly-note"><UserRound size={15} /> {backendConfigured ? 'Masukkan password akun guru Anda.' : 'Mode lokal: pilih nama untuk melihat data pribadi. Mode guru tetap read-only.'}</p>}{error && <p className="setup-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={role === 'guru' ? !teacherId || (backendConfigured && !password) : !username || !password}><KeyRound size={17} /> Masuk</button></form><small>Supervisor baru menggunakan password awal <strong>supervisorsmakenpas</strong> dan wajib menggantinya saat pertama masuk.</small></div></div>
+  return <div className="startup-screen login-screen"><div className="login-card"><div className="startup-mark"><ShieldCheck size={26} /></div><p className="eyebrow">Akses ruang supervisi</p><h1>Masuk ke supervisi</h1><p className="setup-intro">Pilih peran sesuai akun untuk membuka data yang tersedia.</p><form onSubmit={submit}><label>Peran<select value={role} onChange={(event) => { const nextRole = event.target.value as UserRole; setRole(nextRole); setUsername(''); setPassword(''); setTeacherId(''); setError('') }}><option value="admin">Admin</option><option value="supervisor">Supervisor</option><option value="guru">Guru · baca saja</option></select></label>{role === 'guru' && !backendGuruLogin ? <label>Nama guru<select autoFocus value={teacherId} onChange={(event) => { const nextTeacherId = event.target.value; setTeacherId(nextTeacherId); setUsername(''); setError('') }}><option value="">Pilih nama Anda...</option>{activeTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label> : <label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder={role === 'supervisor' ? 'Contoh: Nurdiana' : role === 'guru' ? 'Nama depan guru' : 'Masukkan username admin'} autoComplete="username" /></label>}{(role !== 'guru' || backendGuruLogin) && <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Masukkan password" autoComplete="current-password" /></label>}{role === 'guru' && <p className="login-readonly-note"><UserRound size={15} /> {backendGuruLogin ? 'Masukkan username dan password akun guru Anda.' : 'Mode lokal: pilih nama untuk melihat data pribadi. Mode guru tetap read-only.'}</p>}{error && <p className="setup-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={role === 'guru' ? (backendGuruLogin ? !username || !password : !teacherId) : !username || !password}><KeyRound size={17} /> Masuk</button></form><small>Supervisor baru menggunakan password awal <strong>supervisorsmakenpas</strong> dan wajib menggantinya saat pertama masuk.</small></div></div>
 }
 
 function PasswordChangeScreen({ session, supervisors, required, onComplete, onCancel, onSignOut }: { session: AuthSession; supervisors: Supervisor[]; required: boolean; onComplete: (session: AuthSession) => void; onCancel: () => void; onSignOut: () => Promise<void> }) {
@@ -545,7 +621,7 @@ function PrintFlow() {
   return <section className="print-page print-flow-page"><h2>Alur Pelaksanaan Observasi:</h2><ol><li>Instrumen Observasi → digunakan saat supervisi berlangsung.</li><li>Instrumen Pasca Observasi → digunakan setelah observasi, untuk refleksi guru dan umpan balik supervisor.</li><li>Tindak Lanjut → menjadi catatan bersama yang disepakati.</li></ol></section>
 }
 
-function SettingsPage({ settings, onSettingsChange }: { settings: AppSettings; onSettingsChange: (settings: AppSettings) => void }) {
+function SettingsPage({ settings, onSettingsChange }: { settings: AppSettings; onSettingsChange: (settings: AppSettings) => Promise<void> }) {
   const [draft, setDraft] = useState(settings)
   const [saved, setSaved] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -561,38 +637,39 @@ function SettingsPage({ settings, onSettingsChange }: { settings: AppSettings; o
     reader.onload = () => { update({ signatureImage: typeof reader.result === 'string' ? reader.result : '' }); setUploadError('') }
     reader.readAsDataURL(file)
   }
-  const save = () => { onSettingsChange(draft); setSaved(true); window.setTimeout(() => setSaved(false), 2600) }
+  const save = async () => { try { await onSettingsChange(draft); setSaved(true); window.setTimeout(() => setSaved(false), 2600) } catch { setSaved(false) } }
   return <div className="page-wrap settings-page"><section className="welcome-row"><div><p className="eyebrow">Pengaturan aplikasi</p><h1>Pengaturan</h1><p className="muted">Kelola identitas sekolah dan format default yang digunakan dalam penilaian serta laporan.</p></div><button className="primary-button" onClick={save}><Check size={17} /> Simpan pengaturan</button></section><div className="settings-grid"><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Identitas sekolah</h2><p className="muted">Ditampilkan pada header aplikasi dan laporan PDF.</p></div></div><div className="settings-fields"><label>Nama sekolah<input value={draft.schoolName} onChange={(event) => update({ schoolName: event.target.value })} placeholder="Contoh: SMKN Pasirian" /></label><label>Kota / tempat tanda tangan<input value={draft.signatureCity} onChange={(event) => update({ signatureCity: event.target.value })} placeholder="Contoh: Pasirian" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon lilac"><ClipboardCheck size={18} /></div><div><h2>Default penilaian</h2><p className="muted">Dipakai saat membuat penilaian baru. Penilaian lama tidak berubah.</p></div></div><div className="settings-fields"><label>Periode penilaian default<input value={draft.defaultPeriod} onChange={(event) => update({ defaultPeriod: event.target.value })} placeholder="Contoh: 2026" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon peach"><FileText size={18} /></div><div><h2>Tanda tangan laporan</h2><p className="muted">Nama, jabatan, dan PNG transparan ini ditampilkan pada laporan PDF.</p></div></div><div className="settings-fields signature-settings-fields"><label>Nama penandatangan<input value={draft.signatureName} onChange={(event) => update({ signatureName: event.target.value })} placeholder="Contoh: Siti Rahmawati, S.Pd." /></label><label>Jabatan penandatangan<input value={draft.signaturePosition} onChange={(event) => update({ signaturePosition: event.target.value })} placeholder="Contoh: Kepala Sekolah" /></label><label>Keterangan di bawah supervisor<input value={draft.signatureDetail} onChange={(event) => update({ signatureDetail: event.target.value })} placeholder="Contoh: Kepala Sekolah & Pendamping Sekolah" /></label><label>Gambar tanda tangan PNG<input type="file" accept="image/png" onChange={handleSignatureUpload} /><small>PNG transparan, maksimal 1 MB.</small></label></div>{draft.signatureImage && <div className="signature-preview"><img src={draft.signatureImage} alt="Pratinjau tanda tangan" /><button type="button" className="secondary-button compact" onClick={() => { update({ signatureImage: '' }); setUploadError('') }}>Hapus tanda tangan</button></div>}{uploadError && <p className="settings-upload-error" role="alert">{uploadError}</p>}</section></div>{saved && <div className="settings-saved" role="status"><Check size={16} /> Pengaturan tersimpan.</div>}</div>
 }
 
-function Supervisors({ teachers, supervisors, onSupervisorsChange }: { teachers: Teacher[]; supervisors: Supervisor[]; onSupervisorsChange: (supervisors: Supervisor[]) => void }) {
+function Supervisors({ teachers, supervisors, onSupervisorsChange }: { teachers: Teacher[]; supervisors: Supervisor[]; onSupervisorsChange: (supervisors: Supervisor[]) => Promise<void> }) {
   const [showDialog, setShowDialog] = useState(false)
   const [feedback, setFeedback] = useState('')
-  const addSupervisor = (name: string, position: string) => {
+  const addSupervisor = async (name: string, position: string) => {
     const duplicate = supervisors.some((supervisor) => supervisor.name.trim().toLowerCase() === name.trim().toLowerCase())
     if (duplicate) return 'Supervisor dengan nama tersebut sudah terdaftar.'
-    const supervisor = { id: `supervisor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: name.trim(), position: position.trim(), active: true }
-    onSupervisorsChange([...supervisors, supervisor])
+    const teacher = teachers.find((item) => item.name.trim().toLowerCase() === name.trim().toLowerCase())
+    const supervisor = { id: `supervisor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: name.trim(), position: position.trim(), teacherId: teacher?.id, active: true }
+    try { await onSupervisorsChange([...supervisors, supervisor]) } catch (reason) { return reason instanceof Error ? reason.message : 'Supervisor gagal disimpan.' }
     setShowDialog(false)
     setFeedback(`${supervisor.name} berhasil ditambahkan.`)
     return undefined
   }
-  const toggleSupervisor = (id: string) => onSupervisorsChange(supervisors.map((supervisor) => supervisor.id === id ? { ...supervisor, active: !supervisor.active } : supervisor))
+  const toggleSupervisor = async (id: string) => { try { await onSupervisorsChange(supervisors.map((supervisor) => supervisor.id === id ? { ...supervisor, active: !supervisor.active } : supervisor)) } catch (reason) { setFeedback(reason instanceof Error ? reason.message : 'Status supervisor gagal diperbarui.') } }
 
   return <div className="page-wrap"><section className="welcome-row"><div><p className="eyebrow">Pengaturan data</p><h1>Supervisor</h1><p className="muted">Atur nama supervisor yang dapat dipilih pada informasi observasi.</p></div><button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={18} /> Tambah supervisor</button></section><div className="panel table-panel"><div className="panel-head"><div><h2>{supervisors.length} supervisor terdaftar</h2><p className="muted">Supervisor nonaktif tidak muncul pada penilaian baru.</p></div></div>{feedback && <div className="csv-feedback success" role="status">{feedback}<button type="button" onClick={() => setFeedback('')} aria-label="Tutup pesan"><X size={14} /></button></div>}<div className="supervisor-table"><div className="supervisor-header"><span>Nama supervisor</span><span>Jabatan</span><span>Status</span><span /></div>{supervisors.map((supervisor) => <div className="supervisor-row" key={supervisor.id}><div className="teacher-cell"><div className="avatar navy">{makeTeacherInitials(supervisor.name)}</div><strong>{supervisor.name}</strong></div><span>{supervisor.position || '—'}</span><span className={`status-text ${supervisor.active ? 'complete' : ''}`}>{supervisor.active ? 'Aktif' : 'Nonaktif'}</span><button type="button" className="secondary-button compact supervisor-toggle" onClick={() => toggleSupervisor(supervisor.id)}>{supervisor.active ? 'Nonaktifkan' : 'Aktifkan'}</button></div>)}</div></div>{showDialog && <SupervisorDialog teachers={teachers} supervisors={supervisors} onClose={() => setShowDialog(false)} onSubmit={addSupervisor} />}</div>
 }
 
-function SupervisorDialog({ teachers, supervisors, onClose, onSubmit }: { teachers: Teacher[]; supervisors: Supervisor[]; onClose: () => void; onSubmit: (name: string, position: string) => string | undefined }) {
+function SupervisorDialog({ teachers, supervisors, onClose, onSubmit }: { teachers: Teacher[]; supervisors: Supervisor[]; onClose: () => void; onSubmit: (name: string, position: string) => Promise<string | undefined> }) {
   const [name, setName] = useState('')
   const [position, setPosition] = useState('')
   const [error, setError] = useState('')
   const existingNames = new Set(supervisors.map((supervisor) => supervisor.name.trim().toLowerCase()))
   const availableTeachers = teachers.filter((teacher) => teacher.active !== false && !existingNames.has(teacher.name.trim().toLowerCase()))
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!name.trim()) { setError('Nama supervisor wajib diisi.'); return } const message = onSubmit(name, position); if (message) setError(message) }
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!name.trim()) { setError('Nama supervisor wajib diisi.'); return } const message = await onSubmit(name, position); if (message) setError(message) }
   return <div className="teacher-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><form className="teacher-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="supervisor-modal-title"><div className="teacher-modal-head"><div><span className="eyebrow">Pengaturan data</span><h2 id="supervisor-modal-title">Tambah supervisor</h2><p className="muted">Pilih nama dari daftar guru yang terdaftar.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Tutup"><X size={18} /></button></div><div className="teacher-form-fields"><label>Nama supervisor<select autoFocus value={name} onChange={(event) => setName(event.target.value)} disabled={availableTeachers.length === 0}><option value="">{availableTeachers.length ? 'Pilih nama guru...' : 'Semua guru sudah terdaftar'}</option>{availableTeachers.map((teacher) => <option key={teacher.id} value={teacher.name}>{teacher.name}</option>)}</select></label><label>Jabatan<input value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Contoh: Kepala Sekolah" /></label></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose}>Batal</button><button type="submit" className="primary-button compact" disabled={availableTeachers.length === 0}><Plus size={15} /> Tambahkan supervisor</button></div></form></div>
 }
 
-function Teachers({ teachers, assessments, onNew, onTeachersChange }: { teachers: Teacher[]; assessments: Assessment[]; onNew: () => void; onTeachersChange: (teachers: Teacher[]) => void }) {
+function Teachers({ teachers, assessments, onNew, onTeachersChange }: { teachers: Teacher[]; assessments: Assessment[]; onNew: () => void; onTeachersChange: (teachers: Teacher[], removedId?: string) => Promise<void> }) {
   const [showDialog, setShowDialog] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [csvFeedback, setCsvFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -600,11 +677,11 @@ function Teachers({ teachers, assessments, onNew, onTeachersChange }: { teachers
   const archivedTeachers = teachers.filter((teacher) => teacher.active === false)
   const displayedTeachers = showArchived ? archivedTeachers : activeTeachers
 
-  const addTeacher = (name: string, subject: string) => {
+  const addTeacher = async (name: string, subject: string) => {
     const duplicate = teachers.some((teacher) => teacher.name.trim().toLowerCase() === name.trim().toLowerCase())
     if (duplicate) return 'Guru dengan nama tersebut sudah terdaftar.'
     const newTeacher = createTeacher(name, subject, activeTeachers.length)
-    onTeachersChange([...teachers, newTeacher])
+    try { await onTeachersChange([...teachers, newTeacher]) } catch (reason) { return reason instanceof Error ? reason.message : 'Guru gagal disimpan.' }
     setShowDialog(false)
     setCsvFeedback({ type: 'success', text: `${newTeacher.name} berhasil ditambahkan.` })
     return undefined
@@ -617,39 +694,35 @@ function Teachers({ teachers, assessments, onNew, onTeachersChange }: { teachers
     const result = parseTeacherCsv(await file.text(), teachers)
     if (result.error) { setCsvFeedback({ type: 'error', text: result.error }); return }
     if (result.teachers.length === 0) { setCsvFeedback({ type: 'error', text: 'Tidak ada baris guru baru yang dapat diimpor.' }); return }
-    onTeachersChange([...teachers, ...result.teachers])
-    setCsvFeedback({ type: 'success', text: `${result.teachers.length} guru berhasil diimpor${result.skipped ? `, ${result.skipped} baris dilewati` : ''}.` })
+    try { await onTeachersChange([...teachers, ...result.teachers]); setCsvFeedback({ type: 'success', text: `${result.teachers.length} guru berhasil diimpor${result.skipped ? `, ${result.skipped} baris dilewati` : ''}.` }) } catch (reason) { setCsvFeedback({ type: 'error', text: reason instanceof Error ? reason.message : 'Guru gagal diimpor.' }) }
   }
 
-  const archiveTeacher = (teacher: Teacher) => {
-    onTeachersChange(teachers.map((item) => item.id === teacher.id ? { ...item, active: false } : item))
-    setCsvFeedback({ type: 'success', text: `${teacher.name} diarsipkan. Riwayat penilaiannya tetap tersimpan.` })
+  const archiveTeacher = async (teacher: Teacher) => {
+    try { await onTeachersChange(teachers.map((item) => item.id === teacher.id ? { ...item, active: false } : item)); setCsvFeedback({ type: 'success', text: `${teacher.name} diarsipkan. Riwayat penilaiannya tetap tersimpan.` }) } catch (reason) { setCsvFeedback({ type: 'error', text: reason instanceof Error ? reason.message : 'Guru gagal diarsipkan.' }) }
   }
 
-  const restoreTeacher = (teacher: Teacher) => {
-    onTeachersChange(teachers.map((item) => item.id === teacher.id ? { ...item, active: true } : item))
-    setCsvFeedback({ type: 'success', text: `${teacher.name} dipulihkan ke daftar aktif.` })
+  const restoreTeacher = async (teacher: Teacher) => {
+    try { await onTeachersChange(teachers.map((item) => item.id === teacher.id ? { ...item, active: true } : item)); setCsvFeedback({ type: 'success', text: `${teacher.name} dipulihkan ke daftar aktif.` }) } catch (reason) { setCsvFeedback({ type: 'error', text: reason instanceof Error ? reason.message : 'Guru gagal dipulihkan.' }) }
   }
 
-  const deleteTeacher = (teacher: Teacher) => {
+  const deleteTeacher = async (teacher: Teacher) => {
     const assessmentCount = assessments.filter((assessment) => assessment.teacherId === teacher.id).length
     if (assessmentCount > 0) {
       setCsvFeedback({ type: 'error', text: `${teacher.name} memiliki ${assessmentCount} penilaian dan tidak dapat dihapus. Gunakan Arsipkan.` })
       return
     }
     if (!window.confirm(`Hapus permanen data ${teacher.name}?`)) return
-    onTeachersChange(teachers.filter((item) => item.id !== teacher.id))
-    setCsvFeedback({ type: 'success', text: `${teacher.name} dihapus permanen.` })
+    try { await onTeachersChange(teachers.filter((item) => item.id !== teacher.id), teacher.id); setCsvFeedback({ type: 'success', text: `${teacher.name} dihapus permanen.` }) } catch (reason) { setCsvFeedback({ type: 'error', text: reason instanceof Error ? reason.message : 'Guru gagal dihapus.' }) }
   }
 
   return <div className="page-wrap"><section className="welcome-row"><div><p className="eyebrow">Data sekolah</p><h1>Daftar guru</h1><p className="muted">Kelola guru aktif dan arsip guru yang sudah tidak dipantau.</p></div><button className="primary-button" onClick={onNew}><Plus size={18} /> Penilaian baru</button></section><div className="panel table-panel"><div className="panel-head teacher-panel-head"><div><h2>{activeTeachers.length} guru aktif</h2><p className="muted">{archivedTeachers.length ? `${archivedTeachers.length} guru diarsipkan. ` : ''}Tambahkan atau impor data guru melalui CSV.</p></div><div className="teacher-actions"><button className="secondary-button compact" onClick={() => setShowDialog(true)}><Plus size={16} /> Tambah guru</button><label className="secondary-button compact upload-button" htmlFor="teacher-csv-upload"><Upload size={15} /> Unggah CSV</label><input id="teacher-csv-upload" className="visually-hidden" type="file" accept=".csv,text/csv" onChange={handleCsvUpload} /><button className="template-button" onClick={downloadTeacherTemplate}><Download size={14} /> Template CSV</button>{archivedTeachers.length > 0 && <button className="template-button" onClick={() => setShowArchived((current) => !current)}>{showArchived ? 'Lihat guru aktif' : `Lihat arsip (${archivedTeachers.length})`}</button>}</div></div>{csvFeedback && <div className={`csv-feedback ${csvFeedback.type}`} role="status">{csvFeedback.text}<button type="button" onClick={() => setCsvFeedback(null)} aria-label="Tutup pesan"><X size={14} /></button></div>}<div className="teacher-table"><div className="teacher-header"><span>Guru</span><span>Mata pelajaran</span><span>Penilaian</span><span>Status terbaru</span><span>Aksi</span></div>{displayedTeachers.length === 0 ? <div className="teacher-empty">{showArchived ? 'Belum ada guru diarsipkan.' : 'Belum ada guru aktif. Tambahkan guru atau unggah CSV.'}</div> : displayedTeachers.map((teacher) => { const items = assessments.filter((assessment) => assessment.teacherId === teacher.id); const latest = items[0]; const isActive = teacher.active !== false; return <div className={`teacher-row ${isActive ? '' : 'archived'}`} key={teacher.id}><div className="teacher-cell"><div className="avatar" style={{ background: teacher.color }}>{teacher.initials}</div><strong>{teacher.name}</strong></div><span>{teacher.subject}</span><span>{items.length} penilaian</span><span className={`status-text ${!isActive ? 'archived' : latest?.status === 'selesai' ? 'complete' : ''}`}>{!isActive ? 'Diarsipkan' : latest ? latest.status === 'selesai' ? 'Selesai' : 'Draf' : 'Belum ada'}</span><div className="teacher-actions-cell">{isActive ? <button type="button" className="secondary-button compact" onClick={() => archiveTeacher(teacher)}><Archive size={14} /> Arsipkan</button> : <button type="button" className="secondary-button compact" onClick={() => restoreTeacher(teacher)}><RotateCcw size={14} /> Pulihkan</button>}{items.length === 0 && <button type="button" className="danger-button compact" onClick={() => deleteTeacher(teacher)} aria-label={`Hapus ${teacher.name}`}><Trash2 size={14} /></button>}</div></div> })}</div></div>{showDialog && <TeacherDialog onClose={() => setShowDialog(false)} onSubmit={addTeacher} />}</div>
 }
 
-function TeacherDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (name: string, subject: string) => string | undefined }) {
+function TeacherDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (name: string, subject: string) => Promise<string | undefined> }) {
   const [name, setName] = useState('')
   const [subject, setSubject] = useState('')
   const [error, setError] = useState('')
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!name.trim() || !subject.trim()) { setError('Nama guru dan mata pelajaran wajib diisi.'); return } const message = onSubmit(name, subject); if (message) setError(message) }
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!name.trim() || !subject.trim()) { setError('Nama guru dan mata pelajaran wajib diisi.'); return } const message = await onSubmit(name, subject); if (message) setError(message) }
   return <div className="teacher-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><form className="teacher-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="teacher-modal-title"><div className="teacher-modal-head"><div><span className="eyebrow">Data sekolah</span><h2 id="teacher-modal-title">Tambah guru</h2><p className="muted">Masukkan identitas guru yang akan dipantau.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Tutup"><X size={18} /></button></div><div className="teacher-form-fields"><label>Nama guru<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Contoh: Siti Rahmawati, S.Pd." /></label><label>Mata pelajaran<input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Contoh: Bahasa Indonesia" /></label></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose}>Batal</button><button type="submit" className="primary-button compact"><Plus size={15} /> Tambahkan guru</button></div></form></div>
 }
 

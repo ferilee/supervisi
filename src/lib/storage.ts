@@ -1,9 +1,11 @@
 import type { AppSettings, Assessment, Supervisor, Teacher } from '../types'
+import type { PersistedData } from './migration'
 
 const ASSESSMENTS_KEY = 'supervisi-assessments-v1'
 const TEACHERS_KEY = 'supervisi-teachers-v1'
 const SUPERVISORS_KEY = 'supervisi-supervisors-v1'
 const SETTINGS_KEY = 'supervisi-settings-v1'
+export const LOCAL_MIGRATION_KEY = 'supervisi-local-migration-v1'
 
 export const defaultTeachers: Teacher[] = []
 
@@ -61,6 +63,27 @@ export function getAssessments() {
 
 export function saveAssessments(assessments: Assessment[]) {
   localStorage.setItem(ASSESSMENTS_KEY, JSON.stringify(assessments))
+}
+
+export function hasLocalData() {
+  return [TEACHERS_KEY, SUPERVISORS_KEY, SETTINGS_KEY, ASSESSMENTS_KEY].some((key) => Boolean(localStorage.getItem(key)))
+}
+
+export function hasCompletedLocalMigration() {
+  return localStorage.getItem(LOCAL_MIGRATION_KEY) === 'completed'
+}
+
+export function markLocalMigrationCompleted() {
+  localStorage.setItem(LOCAL_MIGRATION_KEY, 'completed')
+}
+
+export function getLocalDataSnapshot(): PersistedData {
+  return {
+    teachers: getTeachers(),
+    supervisors: getSupervisors(),
+    assessments: getAssessments(),
+    settings: localStorage.getItem(SETTINGS_KEY) ? getSettings() : null,
+  }
 }
 
 export function makeId() {
