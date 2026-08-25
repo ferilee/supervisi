@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ArrowLeft, ArrowRight, BarChart3, Bell, BookOpenCheck, Check, ChevronDown, CircleAlert, ClipboardCheck,
-  Download, FileDown, FileText, LayoutDashboard, Maximize2, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck,
-  Sparkles, Upload, Users, X,
+  Download, FileDown, FileText, KeyRound, LayoutDashboard, LogOut, Maximize2, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck,
+  Sparkles, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { feedbackAspects, followUpAspects, observationItems, preObservationItems, reflectionQuestions, scoreLabels } from './data/instrument'
+import { bootstrapLocalAccounts, changePassword, getStoredSession, isBackendConfigured, signIn, signOut } from './lib/auth'
 import { averageScore, completedCount, totalScore } from './lib/scoring'
 import { defaultSettings, defaultSupervisors, getAssessments, getSettings, getSupervisors, getTeachers, makeId, saveAssessments, saveSettings, saveSupervisors, saveTeachers } from './lib/storage'
-import type { AppPage, AppSettings, Assessment, RubricItem, ScoredResponse, Score, Stage, Supervisor, Teacher } from './types'
+import type { AppPage, AppSettings, Assessment, AuthSession, RubricItem, ScoredResponse, Score, Stage, Supervisor, Teacher, UserRole } from './types'
 
 const steps: Array<{ id: Stage; label: string; short: string }> = [
   { id: 'pra-observasi', label: 'Pra-observasi', short: 'RPP / Modul Ajar' },
@@ -30,9 +31,11 @@ function App() {
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => getSupervisors())
   const [settings, setSettings] = useState<AppSettings>(() => getSettings())
   const [assessments, setAssessments] = useState<Assessment[]>(() => getAssessments())
+  const [session, setSession] = useState<AuthSession | null>(() => getStoredSession())
   const [active, setActive] = useState<Assessment | null>(null)
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState('')
+  const [showPasswordChange, setShowPasswordChange] = useState(false)
 
   const persistAssessment = (next: Assessment, message = 'Perubahan tersimpan') => {
     const updated = { ...next, updatedAt: new Date().toISOString() }
@@ -48,6 +51,8 @@ function App() {
   const persistSupervisors = (next: Supervisor[]) => { setSupervisors(next); saveSupervisors(next) }
   const persistSettings = (next: AppSettings) => { setSettings(next); saveSettings(next) }
 
+  useEffect(() => { bootstrapLocalAccounts(supervisors) }, [supervisors])
+
   const startAssessment = () => {
     setActive(freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod))
     setPage('assessment')
@@ -62,6 +67,14 @@ function App() {
     setPage(nextPage)
     setMobileNav(false)
   }
+
+  const handleSignIn = async (input: { username: string; password: string; role: UserRole; teacherId?: string }) => {
+    const nextSession = await signIn({ ...input, supervisors, teachers })
+    setSession(nextSession)
+    setPage(nextSession.role === 'guru' ? 'reports' : 'dashboard')
+  }
+
+  const handleSignOut = async () => { await signOut(); setSession(null); setActive(null); setPage('dashboard') }
 
   useEffect(() => {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -81,7 +94,15 @@ function App() {
   }
 
   if (isBooting) return <LoadingScreen schoolName={settings.schoolName} />
-  if (!settings.supervisorSetupComplete) return <SupervisorSetup teachers={teachers} onComplete={completeSupervisorSetup} />
+  if (!session) return <LoginScreen teachers={teachers} backendConfigured={isBackendConfigured} onSubmit={handleSignIn} />
+  if (session.mustChangePassword || showPasswordChange) return <PasswordChangeScreen session={session} supervisors={supervisors} required={session.mustChangePassword} onComplete={(nextSession) => { setSession(nextSession); setShowPasswordChange(false) }} onCancel={() => setShowPasswordChange(false)} onSignOut={handleSignOut} />
+  if (!settings.supervisorSetupComplete && session.role === 'admin') return <SupervisorSetup teachers={teachers} onComplete={completeSupervisorSetup} />
+
+  const isAdmin = session.role === 'admin'
+  const isGuru = session.role === 'guru'
+  const visibleAssessments = isGuru ? assessments.filter((item) => item.teacherId === session.teacherId) : assessments
+  const visibleTeachers = isGuru ? teachers.filter((item) => item.id === session.teacherId) : teachers
+  const canManage = !isGuru
 
   return (
     <div className="app-shell">
@@ -93,34 +114,36 @@ function App() {
         <div className="sidebar-label">Ruang kerja</div>
         <nav>
           <NavItem icon={<LayoutDashboard size={18} />} label="Ringkasan" active={page === 'dashboard'} onClick={() => navigate('dashboard')} />
-          <NavItem icon={<ClipboardCheck size={18} />} label="Penilaian" active={page === 'assessment'} onClick={() => navigate('assessment')} />
-          <NavItem icon={<Users size={18} />} label="Daftar guru" active={page === 'teachers'} onClick={() => navigate('teachers')} />
-          <NavItem icon={<Settings2 size={18} />} label="Supervisor" active={page === 'supervisors'} onClick={() => navigate('supervisors')} />
+          {!isGuru && <NavItem icon={<ClipboardCheck size={18} />} label="Penilaian" active={page === 'assessment'} onClick={() => navigate('assessment')} />}
+          {isAdmin && <NavItem icon={<Users size={18} />} label="Daftar guru" active={page === 'teachers'} onClick={() => navigate('teachers')} />}
+          {isAdmin && <NavItem icon={<Settings2 size={18} />} label="Supervisor" active={page === 'supervisors'} onClick={() => navigate('supervisors')} />}
           <NavItem icon={<BarChart3 size={18} />} label="Laporan" active={page === 'reports'} onClick={() => navigate('reports')} />
-          <NavItem icon={<Settings2 size={18} />} label="Pengaturan" active={page === 'settings'} onClick={() => navigate('settings')} />
+          {isAdmin && <NavItem icon={<Settings2 size={18} />} label="Pengaturan" active={page === 'settings'} onClick={() => navigate('settings')} />}
         </nav>
         <div className="sidebar-spacer" />
         <div className="help-card"><Sparkles size={18} /><strong>Ruang refleksi</strong><span>Supervisi adalah percakapan untuk tumbuh bersama.</span></div>
-        <button className={`sidebar-footer ${page === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}><Settings2 size={17} /><span>Pengaturan</span></button>
+        {isAdmin && <button className={`sidebar-footer ${page === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}><Settings2 size={17} /><span>Pengaturan</span></button>}
       </aside>
       {mobileNav && <button className="mobile-overlay" onClick={() => setMobileNav(false)} aria-label="Tutup menu" />}
       <main className="main-content">
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Buka menu"><Menu size={22} /></button>
           <div className="breadcrumbs"><span>{settings.schoolName}</span><span className="slash">/</span><strong>{page === 'dashboard' ? 'Ringkasan' : page === 'assessment' ? 'Penilaian' : page === 'teachers' ? 'Daftar guru' : page === 'supervisors' ? 'Supervisor' : page === 'settings' ? 'Pengaturan' : 'Laporan'}</strong></div>
-          <div className="topbar-actions"><NotificationBell assessments={assessments} teachers={teachers} onOpen={editAssessment} onNew={startAssessment} /><div className="profile"><div className="avatar navy">KS</div><div><strong>Kepala Sekolah</strong><span>Administrator</span></div><ChevronDown size={16} /></div></div>
+          <div className="topbar-actions">{!isGuru && <NotificationBell assessments={visibleAssessments} teachers={visibleTeachers} onOpen={editAssessment} onNew={startAssessment} />}<div className="profile"><div className="avatar navy"><UserRound size={16} /></div><div><strong>{session.displayName}</strong><span>{roleLabel(session.role)}</span></div>{session.role === 'supervisor' && <button className="profile-password" type="button" onClick={() => setShowPasswordChange(true)} aria-label="Ganti password"><KeyRound size={15} /></button>}<button className="profile-logout" type="button" onClick={handleSignOut} aria-label="Keluar"><LogOut size={15} /></button></div></div>
         </header>
-        {page === 'dashboard' && <Dashboard assessments={assessments} teachers={teachers} onNew={startAssessment} onOpen={editAssessment} />}
-        {page === 'teachers' && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} onTeachersChange={persistTeachers} />}
-        {page === 'supervisors' && <Supervisors teachers={teachers} supervisors={supervisors} onSupervisorsChange={persistSupervisors} />}
-        {page === 'settings' && <SettingsPage settings={settings} onSettingsChange={persistSettings} />}
-        {page === 'reports' && <Reports assessments={assessments} teachers={teachers} onOpen={editAssessment} />}
-        {page === 'assessment' && <AssessmentWorkspace assessment={active ?? freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod)} teachers={teachers} supervisors={supervisors} settings={settings} onBack={() => navigate('dashboard')} onSave={persistAssessment} />}
+        {page === 'dashboard' && <Dashboard assessments={visibleAssessments} teachers={visibleTeachers} displayName={session.displayName} canCreate={canManage} onNew={startAssessment} onOpen={editAssessment} />}
+        {page === 'teachers' && isAdmin && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} onTeachersChange={persistTeachers} />}
+        {page === 'supervisors' && isAdmin && <Supervisors teachers={teachers} supervisors={supervisors} onSupervisorsChange={persistSupervisors} />}
+        {page === 'settings' && isAdmin && <SettingsPage settings={settings} onSettingsChange={persistSettings} />}
+        {page === 'reports' && <Reports assessments={visibleAssessments} teachers={visibleTeachers} onOpen={editAssessment} />}
+        {page === 'assessment' && <AssessmentWorkspace assessment={active ?? visibleAssessments[0] ?? freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod)} teachers={visibleTeachers} supervisors={supervisors} settings={settings} readOnly={isGuru} onBack={() => navigate(isGuru ? 'reports' : 'dashboard')} onSave={persistAssessment} />}
       </main>
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
   )
 }
+
+function roleLabel(role: UserRole) { return role === 'admin' ? 'Administrator' : role === 'supervisor' ? 'Supervisor' : 'Guru · baca saja' }
 
 function LoadingScreen({ schoolName }: { schoolName: string }) {
   return <div className="startup-screen loading-screen"><div className="startup-brand"><div className="startup-mark"><ShieldCheck size={26} /></div><strong>supervisi</strong><span>{schoolName}</span></div><div className="loading-indicator" aria-label="Memuat aplikasi"><i /></div><p>Menyiapkan ruang supervisi...</p></div>
@@ -132,6 +155,43 @@ function SupervisorSetup({ teachers, onComplete }: { teachers: Teacher[]; onComp
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!teacherId) { setError('Pilih nama supervisor terlebih dahulu.'); return } onComplete(teacherId) }
   return <div className="startup-screen setup-screen"><div className="setup-card"><div className="startup-mark"><ShieldCheck size={26} /></div><p className="eyebrow">Penyiapan awal</p><h1>Selamat datang di supervisi</h1><p className="setup-intro">Sebelum membuka dashboard, tentukan nama supervisor yang akan digunakan pada penilaian.</p><form onSubmit={submit}><label>Nama supervisor<select autoFocus value={teacherId} onChange={(event) => { setTeacherId(event.target.value); setError('') }} disabled={teachers.length === 0}><option value="">{teachers.length ? 'Pilih nama guru...' : 'Belum ada guru terdaftar'}</option>{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label>{teachers.length === 0 && <p className="setup-error">Tambahkan guru terlebih dahulu agar nama supervisor dapat dipilih.</p>}{error && <p className="setup-error">{error}</p>}<button type="submit" className="primary-button" disabled={!teachers.length}><Check size={17} /> Simpan & buka dashboard</button></form><small>Nama ini dapat dikelola kembali melalui menu Supervisor.</small></div></div>
 }
+
+function LoginScreen({ teachers, backendConfigured, onSubmit }: { teachers: Teacher[]; backendConfigured: boolean; onSubmit: (input: { username: string; password: string; role: UserRole; teacherId?: string }) => Promise<void> }) {
+  const [role, setRole] = useState<UserRole>('admin')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [teacherId, setTeacherId] = useState('')
+  const [error, setError] = useState('')
+  const selectedTeacher = teachers.find((teacher) => teacher.id === teacherId)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError('')
+    try {
+      await onSubmit({ username: role === 'guru' ? usernameFromName(selectedTeacher?.name ?? '') : username, password, role, teacherId: role === 'guru' ? teacherId : undefined })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Login gagal. Periksa kembali data akun.')
+    }
+  }
+  return <div className="startup-screen login-screen"><div className="login-card"><div className="startup-mark"><ShieldCheck size={26} /></div><p className="eyebrow">Akses ruang supervisi</p><h1>Masuk ke supervisi</h1><p className="setup-intro">Pilih peran sesuai akun untuk membuka data yang tersedia.</p><form onSubmit={submit}><label>Peran<select value={role} onChange={(event) => { const nextRole = event.target.value as UserRole; setRole(nextRole); setUsername(''); setPassword(''); setTeacherId(''); setError('') }}><option value="admin">Admin</option><option value="supervisor">Supervisor</option><option value="guru">Guru · baca saja</option></select></label>{role === 'guru' ? <label>Nama guru<select autoFocus value={teacherId} onChange={(event) => { const nextTeacherId = event.target.value; setTeacherId(nextTeacherId); setUsername(''); setError('') }}><option value="">Pilih nama Anda...</option>{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}</select></label> : <label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder={role === 'supervisor' ? 'Contoh: Nurdiana' : 'Masukkan username admin'} autoComplete="username" /></label>}{(role !== 'guru' || backendConfigured) && <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Masukkan password" autoComplete="current-password" /></label>}{role === 'guru' && <p className="login-readonly-note"><UserRound size={15} /> {backendConfigured ? 'Masukkan password akun guru Anda.' : 'Mode lokal: pilih nama untuk melihat data pribadi. Mode guru tetap read-only.'}</p>}{error && <p className="setup-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={role === 'guru' ? !teacherId || (backendConfigured && !password) : !username || !password}><KeyRound size={17} /> Masuk</button></form><small>Supervisor baru menggunakan password awal <strong>supervisorsmakenpas</strong> dan wajib menggantinya saat pertama masuk.</small></div></div>
+}
+
+function PasswordChangeScreen({ session, supervisors, required, onComplete, onCancel, onSignOut }: { session: AuthSession; supervisors: Supervisor[]; required: boolean; onComplete: (session: AuthSession) => void; onCancel: () => void; onSignOut: () => Promise<void> }) {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [nextPassword, setNextPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (nextPassword !== confirmation) { setError('Konfirmasi password baru belum sama.'); return }
+    setSaving(true)
+    setError('')
+    try { onComplete(await changePassword(session, currentPassword, nextPassword, supervisors)) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Password gagal diperbarui.') } finally { setSaving(false) }
+  }
+  return <div className="startup-screen login-screen"><div className="login-card"><div className="startup-mark"><KeyRound size={25} /></div><p className="eyebrow">Keamanan akun</p><h1>Ganti password</h1><p className="setup-intro">{required ? 'Password awal supervisor harus diganti sebelum dashboard dapat digunakan.' : 'Perbarui password supervisor secara berkala untuk menjaga keamanan akun.'}</p><form onSubmit={submit}><label>Password saat ini<input type="password" autoFocus value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" /></label><label>Password baru<input type="password" value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} minLength={8} autoComplete="new-password" /></label><label>Ulangi password baru<input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} minLength={8} autoComplete="new-password" /></label>{error && <p className="setup-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={saving || !currentPassword || nextPassword.length < 8 || !confirmation}>{saving ? 'Menyimpan...' : 'Simpan password'}</button></form>{!required && <button type="button" className="text-button login-signout" onClick={onCancel}>Batal</button>}<button type="button" className="text-button login-signout" onClick={onSignOut}><LogOut size={15} /> Keluar</button></div></div>
+}
+
+function usernameFromName(name: string) { return name.trim().split(/\s+/)[0] ?? '' }
 
 function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{active && <span className="nav-pip" />}</button>
@@ -190,19 +250,19 @@ function buildNotifications(assessments: Assessment[], teachers: Teacher[]) {
   return notifications
 }
 
-function Dashboard({ assessments, teachers, onNew, onOpen }: { assessments: Assessment[]; teachers: Teacher[]; onNew: () => void; onOpen: (assessment: Assessment) => void }) {
+function Dashboard({ assessments, teachers, displayName = 'Kepala Sekolah', canCreate = true, onNew, onOpen }: { assessments: Assessment[]; teachers: Teacher[]; displayName?: string; canCreate?: boolean; onNew: () => void; onOpen: (assessment: Assessment) => void }) {
   const done = assessments.filter((item) => item.status === 'selesai').length
   const inProgress = assessments.filter((item) => item.status === 'draft').length
   return <div className="page-wrap">
-    <section className="welcome-row"><div><p className="eyebrow">Jumat, 21 Agustus 2026</p><h1>Selamat datang, Kepala Sekolah.</h1><p className="muted">Mari melihat perkembangan supervisi pembelajaran di sekolah.</p></div><button className="primary-button" onClick={onNew}><Plus size={18} /> Penilaian baru</button></section>
+    <section className="welcome-row"><div><p className="eyebrow">Jumat, 21 Agustus 2026</p><h1>Selamat datang, {displayName}.</h1><p className="muted">{canCreate ? 'Mari melihat perkembangan supervisi pembelajaran di sekolah.' : 'Berikut ringkasan data supervisi Anda.'}</p></div>{canCreate && <button className="primary-button" onClick={onNew}><Plus size={18} /> Penilaian baru</button>}</section>
     <section className="stats-grid"><StatCard icon={<Users size={19} />} label="Guru dalam pemantauan" value={String(teachers.length)} detail="Tahun ajaran 2026" tone="mint" /><StatCard icon={<ClipboardCheck size={19} />} label="Penilaian selesai" value={String(done)} detail="Dari seluruh penilaian" tone="blue" /><StatCard icon={<FileText size={19} />} label="Masih berjalan" value={String(inProgress)} detail="Perlu ditindaklanjuti" tone="peach" /><StatCard icon={<Sparkles size={19} />} label="Rata-rata sekolah" value={assessments.length ? `${(assessments.reduce((sum, a) => sum + averageScore(observationItems, a.observation), 0) / assessments.length || 0).toFixed(1)}` : '—'} detail="Skala 1 sampai 4" tone="lilac" /></section>
-    <section className="content-grid"><div className="panel recent-panel"><div className="panel-head"><div><h2>Aktivitas terbaru</h2><p className="muted">Perubahan terakhir pada penilaian guru.</p></div><button className="text-button" onClick={onNew}>Lihat semua <ArrowRight size={15} /></button></div>{assessments.length === 0 ? <EmptyState onNew={onNew} /> : <div className="activity-list">{assessments.slice(0, 5).map((assessment) => <AssessmentRow key={assessment.id} assessment={assessment} teachers={teachers} onClick={() => onOpen(assessment)} />)}</div>}</div><div className="panel cycle-panel"><div className="panel-head"><div><h2>Siklus supervisi</h2><p className="muted">Alur pendampingan pembelajaran.</p></div><MoreHorizontal size={18} className="muted" /></div><div className="cycle-list"><CycleStep number="01" title="Pra-observasi" detail="Telaah RPP / Modul Ajar" done={assessments.length > 0} /><CycleStep number="02" title="Observasi" detail="Praktik pembelajaran di kelas" done={assessments.some((a) => a.currentStage !== 'pra-observasi')} /><CycleStep number="03" title="Pasca-observasi" detail="Refleksi dan umpan balik" done={assessments.some((a) => a.status === 'selesai')} /></div><div className="cycle-quote">“Yang kita cari bukan kesempurnaan, tetapi langkah kecil yang berarti.”</div></div></section>
+    <section className="content-grid"><div className="panel recent-panel"><div className="panel-head"><div><h2>Aktivitas terbaru</h2><p className="muted">Perubahan terakhir pada penilaian guru.</p></div>{canCreate && <button className="text-button" onClick={onNew}>Lihat semua <ArrowRight size={15} /></button>}</div>{assessments.length === 0 ? <EmptyState onNew={canCreate ? onNew : undefined} /> : <div className="activity-list">{assessments.slice(0, 5).map((assessment) => <AssessmentRow key={assessment.id} assessment={assessment} teachers={teachers} onClick={() => onOpen(assessment)} />)}</div>}</div><div className="panel cycle-panel"><div className="panel-head"><div><h2>Siklus supervisi</h2><p className="muted">Alur pendampingan pembelajaran.</p></div><MoreHorizontal size={18} className="muted" /></div><div className="cycle-list"><CycleStep number="01" title="Pra-observasi" detail="Telaah RPP / Modul Ajar" done={assessments.length > 0} /><CycleStep number="02" title="Observasi" detail="Praktik pembelajaran di kelas" done={assessments.some((a) => a.currentStage !== 'pra-observasi')} /><CycleStep number="03" title="Pasca-observasi" detail="Refleksi dan umpan balik" done={assessments.some((a) => a.status === 'selesai')} /></div><div className="cycle-quote">“Yang kita cari bukan kesempurnaan, tetapi langkah kecil yang berarti.”</div></div></section>
   </div>
 }
 
 function StatCard({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: string }) { return <div className="stat-card"><div className={`stat-icon ${tone}`}>{icon}</div><div className="stat-copy"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></div> }
 function CycleStep({ number, title, detail, done }: { number: string; title: string; detail: string; done: boolean }) { return <div className="cycle-step"><div className={`step-number ${done ? 'done' : ''}`}>{done ? <Check size={15} /> : number}</div><div><strong>{title}</strong><span>{detail}</span></div><span className={`step-status ${done ? 'complete' : ''}`}>{done ? 'Selesai' : 'Berikutnya'}</span></div> }
-function EmptyState({ onNew }: { onNew: () => void }) { return <div className="empty-state"><BookOpenCheck size={32} /><strong>Belum ada penilaian</strong><span>Mulai dari membuat penilaian untuk seorang guru.</span><button className="secondary-button" onClick={onNew}>Buat penilaian pertama</button></div> }
+function EmptyState({ onNew }: { onNew?: () => void }) { return <div className="empty-state"><BookOpenCheck size={32} /><strong>Belum ada penilaian</strong><span>{onNew ? 'Mulai dari membuat penilaian untuk seorang guru.' : 'Belum ada laporan penilaian untuk akun ini.'}</span>{onNew && <button className="secondary-button" onClick={onNew}>Buat penilaian pertama</button>}</div> }
 function AssessmentRow({ assessment, teachers, onClick }: { assessment: Assessment; teachers: Teacher[]; onClick: () => void }) { const teacher = teachers.find((item) => item.id === assessment.teacherId); const avg = averageScore(observationItems, assessment.observation); return <button className="activity-row" onClick={onClick}><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div className="row-main"><strong>{teacher?.name ?? 'Guru belum dipilih'}</strong><span>{assessment.subject || teacher?.subject || 'Mata pelajaran belum diisi'} · {formatDate(assessment.updatedAt)}</span></div><div className="row-score">{avg ? <><strong>{avg.toFixed(1)}</strong><span>rata-rata</span></> : <span className="draft-label">Draf</span>}</div><div className="row-chevron"><ArrowRight size={16} /></div></button> }
 
 function isStageUnlocked(index: number, assessment: Assessment) {
@@ -222,7 +282,7 @@ function getMissingObservationInfo(assessment: Assessment) {
   return missing
 }
 
-function AssessmentWorkspace({ assessment: initial, teachers, supervisors, settings, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; settings: AppSettings; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
+function AssessmentWorkspace({ assessment: initial, teachers, supervisors, settings, readOnly = false, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; settings: AppSettings; readOnly?: boolean; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
   const [assessment, setAssessment] = useState(initial)
   const [stage, setStage] = useState<Stage>(initial.currentStage)
   const [showMeta, setShowMeta] = useState(false)
@@ -237,17 +297,19 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
   const save = (message = 'Perubahan tersimpan') => onSave(assessment, message)
   const moveTo = (nextStage: Stage, message = 'Tahap penilaian diperbarui') => { const next = { ...assessment, currentStage: nextStage }; setAssessment(next); setStage(nextStage); onSave(next, message) }
   const goNext = () => { if (!observationInfoComplete) { setShowMeta(true); return } if (stageIndex === 0) { if (!preComplete) { window.alert('Lengkapi seluruh skor pra-observasi sebelum melanjutkan ke observasi.'); return } moveTo('observasi', 'Tahap observasi dibuka') } else if (stageIndex === 1) { if (!observationComplete) { window.alert('Lengkapi seluruh skor observasi sebelum melanjutkan ke pasca-observasi.'); return } moveTo('pasca-observasi', 'Tahap pasca-observasi dibuka') } else { const finished = { ...assessment, status: 'selesai' as const, currentStage: 'pasca-observasi' as const }; onSave(finished, 'Penilaian ditandai selesai') } }
-  return <div className="page-wrap workspace-page">
-    <div className="workspace-top"><button className="back-button" onClick={onBack}><ArrowLeft size={17} /> Kembali ke ringkasan</button><div className="workspace-actions"><span className={`status-badge ${assessment.status}`}>{assessment.status === 'selesai' ? <Check size={14} /> : <span className="status-dot" />}{assessment.status === 'selesai' ? 'Selesai' : 'Draf'}</span><button className="secondary-button compact" onClick={() => save()}><Check size={16} /> Simpan draf</button></div></div>
+  return <div className={`page-wrap workspace-page ${readOnly ? 'read-only-workspace' : ''}`}>
+    <div className="workspace-top"><button className="back-button" onClick={onBack}><ArrowLeft size={17} /> Kembali ke ringkasan</button><div className="workspace-actions"><span className={`status-badge ${assessment.status}`}>{assessment.status === 'selesai' ? <Check size={14} /> : <span className="status-dot" />}{assessment.status === 'selesai' ? 'Selesai' : 'Draf'}</span>{!readOnly && <button className="secondary-button compact" onClick={() => save()}><Check size={16} /> Simpan draf</button>}</div></div>
     <div className="workspace-heading"><div><p className="eyebrow">Penilaian kinerja guru · {assessment.period}</p><h1>{teacher?.name ?? 'Penilaian baru'}</h1><p className="muted">Lengkapi instrumen secara bertahap. Perubahan tersimpan sebagai draf.</p></div><button className="icon-button outlined" aria-label="Unduh laporan" onClick={() => window.print()}><FileDown size={18} /></button></div>
-    {showMeta && <MetaForm assessment={assessment} teachers={teachers} supervisors={supervisors} onChange={update} onClose={() => { save('Identitas observasi tersimpan'); setShowMeta(false) }} />}
-    {!showMeta && <button className={`meta-summary ${teacher ? '' : 'is-empty'}`} onClick={() => setShowMeta(true)} aria-expanded={false} aria-controls="observation-info-panel"><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div><strong>{teacher?.name ?? 'Lengkapi informasi observasi'}</strong><span>{teacher ? `${assessment.className || 'Kelas belum diisi'} · ${assessment.subject || teacher.subject} · Observasi ${formatDate(assessment.observationDate)}` : 'Tambahkan guru, kelas, mata pelajaran, dan tanggal observasi'}</span></div><ChevronDown size={18} /></button>}
-    <div className="stepper">{steps.map((item, index) => { const unlocked = observationInfoComplete && isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id && observationInfoComplete ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{!observationInfoComplete ? 'Lengkapi informasi observasi' : unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
-    {!observationInfoComplete && <ObservationInfoRequired missing={missingObservationInfo} onOpen={() => setShowMeta(true)} />}
-    {observationInfoComplete && stage === 'pra-observasi' && <FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} />}
-    {observationInfoComplete && stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
-    {observationInfoComplete && stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
-    <div className="workspace-footer"><button className="secondary-button" onClick={() => { if (stageIndex > 0) moveTo(steps[stageIndex - 1].id) }} disabled={stageIndex === 0}><ArrowLeft size={16} /> Sebelumnya</button><div className="footer-progress"><span>{stageIndex + 1} dari {steps.length}</span><div className="progress-line"><i style={{ width: `${((stageIndex + 1) / steps.length) * 100}%` }} /></div></div><button className="primary-button" onClick={goNext}>{!observationInfoComplete ? 'Lengkapi informasi' : stageIndex === steps.length - 1 ? 'Selesaikan penilaian' : 'Lanjutkan'} <ArrowRight size={16} /></button></div>
+    <fieldset disabled={readOnly} className="workspace-fields">
+      {showMeta && <MetaForm assessment={assessment} teachers={teachers} supervisors={supervisors} onChange={update} onClose={() => { save('Identitas observasi tersimpan'); setShowMeta(false) }} />}
+      {!showMeta && <button className={`meta-summary ${teacher ? '' : 'is-empty'}`} onClick={() => setShowMeta(true)} aria-expanded={false} aria-controls="observation-info-panel"><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div><strong>{teacher?.name ?? 'Lengkapi informasi observasi'}</strong><span>{teacher ? `${assessment.className || 'Kelas belum diisi'} · ${assessment.subject || teacher.subject} · Observasi ${formatDate(assessment.observationDate)}` : 'Tambahkan guru, kelas, mata pelajaran, dan tanggal observasi'}</span></div><ChevronDown size={18} /></button>}
+      <div className="stepper">{steps.map((item, index) => { const unlocked = observationInfoComplete && isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id && observationInfoComplete ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{!observationInfoComplete ? 'Lengkapi informasi observasi' : unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
+      {!observationInfoComplete && <ObservationInfoRequired missing={missingObservationInfo} onOpen={() => setShowMeta(true)} />}
+      {observationInfoComplete && stage === 'pra-observasi' && <FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} />}
+      {observationInfoComplete && stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
+      {observationInfoComplete && stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
+    </fieldset>
+    {readOnly ? <div className="read-only-notice"><UserRound size={17} /><span>Mode guru: data ini hanya dapat dilihat. Perubahan dilakukan oleh supervisor.</span></div> : <div className="workspace-footer"><button className="secondary-button" onClick={() => { if (stageIndex > 0) moveTo(steps[stageIndex - 1].id) }} disabled={stageIndex === 0}><ArrowLeft size={16} /> Sebelumnya</button><div className="footer-progress"><span>{stageIndex + 1} dari {steps.length}</span><div className="progress-line"><i style={{ width: `${((stageIndex + 1) / steps.length) * 100}%` }} /></div></div><button className="primary-button" onClick={goNext}>{!observationInfoComplete ? 'Lengkapi informasi' : stageIndex === steps.length - 1 ? 'Selesaikan penilaian' : 'Lanjutkan'} <ArrowRight size={16} /></button></div>}
     <PrintReport assessment={assessment} teacher={teacher} settings={settings} />
   </div>
 }

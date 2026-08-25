@@ -1,6 +1,17 @@
 export type Score = 1 | 2 | 3 | 4
 export type Stage = 'pra-observasi' | 'observasi' | 'pasca-observasi'
 export type AssessmentStatus = 'draft' | 'selesai'
+export type UserRole = 'admin' | 'supervisor' | 'guru'
+
+export interface AuthSession {
+  userId: string
+  username: string
+  displayName: string
+  role: UserRole
+  teacherId?: string
+  mustChangePassword: boolean
+  backend: 'local' | 'supabase'
+}
 
 export interface Teacher {
   id: string

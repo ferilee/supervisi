@@ -14,7 +14,11 @@ npm install
 npm run dev
 ```
 
-Data guru dan penilaian draf disimpan di `localStorage` agar aplikasi dapat langsung dicoba tanpa konfigurasi server. Skema cloud-ready tersedia di [`supabase/schema.sql`](./supabase/schema.sql). Untuk deployment sekolah, fase berikutnya dapat mengganti adapter penyimpanan dengan Supabase Auth + Postgres dan menambahkan policy RLS berbasis peran.
+Tanpa environment backend, aplikasi berjalan dalam mode lokal dengan `localStorage`. Salin [`.env.example`](./.env.example) menjadi `.env.local`, isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`, lalu login akan memakai Supabase Auth dan profil role akan dibaca dari tabel `profiles`. Jalankan [`supabase/schema.sql`](./supabase/schema.sql) di SQL Editor Supabase untuk membuat tabel serta policy RLS berbasis peran.
+
+Role yang didukung: Admin memiliki akses penuh; Supervisor dapat mengelola penilaian dan laporan tetapi tidak melihat halaman Supervisor/Pengaturan; Guru hanya melihat data penilaiannya sendiri dalam mode baca saja. Password tidak disimpan di Postgres—penggantian password memakai Supabase Auth.
+
+Untuk aktivasi produksi, buat user di Supabase Auth lalu tambahkan baris pasangannya di `profiles`. Admin memakai username `Ferilee`; akun supervisor memakai nama depan sebagai username dan `must_change_password = true`. Pembuatan akun Auth supervisor/guru sebaiknya dilakukan melalui Edge Function dengan service role key, bukan dari browser.
 
 ## Validasi
 

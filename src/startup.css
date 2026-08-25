@@ -73,6 +73,130 @@
   box-shadow: 0 24px 70px rgba(39, 42, 81, .14);
 }
 
+.login-card {
+  width: min(440px, 100%);
+  padding: 34px;
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 24px 70px rgba(39, 42, 81, .14);
+}
+
+.login-card .startup-mark {
+  width: 46px;
+  height: 46px;
+  margin-bottom: 25px;
+}
+
+.login-card h1 {
+  margin: 0 0 10px;
+  color: #252740;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -.7px;
+}
+
+.login-card form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-card label {
+  display: grid;
+  gap: 8px;
+  color: #5e647f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.login-card input,
+.login-card select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #dce1ed;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #252740;
+  font-size: 13px;
+}
+
+.login-card input:focus,
+.login-card select:focus {
+  outline: 2px solid #c7c2ff;
+  border-color: #7469ee;
+}
+
+.login-card .primary-button {
+  justify-content: center;
+  padding: 12px 16px;
+}
+
+.login-card .primary-button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.login-readonly-note,
+.read-only-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6d7392;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.login-readonly-note {
+  margin: -4px 0 0;
+  padding: 10px 11px;
+  border-radius: 9px;
+  background: #f1f0ff;
+  color: #5b55a4;
+}
+
+.login-signout {
+  margin-top: 17px;
+}
+
+.profile-password,
+.profile-logout {
+  display: grid;
+  place-items: center;
+  margin-left: 3px;
+  padding: 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8790a5;
+}
+
+.profile-password:hover,
+.profile-logout:hover {
+  background: #f0f1f7;
+  color: #5d50e8;
+}
+
+.workspace-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.workspace-fields:disabled {
+  opacity: 1;
+}
+
+.read-only-notice {
+  justify-content: center;
+  margin: 24px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #dcd8ff;
+  border-radius: 10px;
+  background: #f1f0ff;
+  color: #5b55a4;
+}
+
 .setup-card .startup-mark {
   width: 46px;
   height: 46px;
@@ -151,12 +275,14 @@
 }
 
 @media (max-width: 650px) {
-  .setup-card {
+  .setup-card,
+  .login-card {
     padding: 26px 22px;
     border-radius: 18px;
   }
 
-  .setup-card h1 {
+  .setup-card h1,
+  .login-card h1 {
     font-size: 24px;
   }
 }
