@@ -20,6 +20,10 @@ Role yang didukung: Admin memiliki akses penuh; Supervisor dapat mengelola penil
 
 Untuk aktivasi produksi, buat user di Supabase Auth lalu tambahkan baris pasangannya di `profiles`. Admin memakai username `Ferilee`; akun supervisor memakai nama depan sebagai username dan `must_change_password = true`. Pembuatan akun Auth supervisor/guru sebaiknya dilakukan melalui Edge Function dengan service role key, bukan dari browser.
 
+## Docker dan GHCR
+
+Workflow [`publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml) dijalankan manual dari GitHub Actions dan menerbitkan `ghcr.io/ferilee/supervisi:latest`. Tambahkan GitHub Actions Variables `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` sebelum menjalankan workflow. Compose production tersedia di [`compose.yaml`](./compose.yaml) dan menggunakan network eksternal `ferileenet` serta port host `2005`. Karena aplikasi ini frontend Vite yang dilayani Nginx, konfigurasi `VITE_*` masuk saat image dibuild; environment Compose tidak mengganti konfigurasi yang sudah berada di bundle.
+
 ## Validasi
 
 ```bash

@@ -1,0 +1,18 @@
+services:
+  app:
+    image: ghcr.io/ferilee/supervisi:latest
+    container_name: supervisi
+    ports:
+      - "2005:80"
+    networks:
+      - ferileenet
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  ferileenet:
+    external: true
