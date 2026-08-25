@@ -10,6 +10,7 @@ import './fintech-theme.css'
 import './teacher-management.css'
 import './print-report.css'
 import './post-tabs.css'
+import './settings.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

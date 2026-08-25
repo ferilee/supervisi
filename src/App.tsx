@@ -6,8 +6,8 @@ import {
 } from 'lucide-react'
 import { feedbackAspects, followUpAspects, observationItems, preObservationItems, reflectionQuestions, scoreLabels } from './data/instrument'
 import { averageScore, completedCount, totalScore } from './lib/scoring'
-import { defaultSupervisors, getAssessments, getSupervisors, getTeachers, makeId, saveAssessments, saveSupervisors, saveTeachers } from './lib/storage'
-import type { AppPage, Assessment, RubricItem, ScoredResponse, Score, Stage, Supervisor, Teacher } from './types'
+import { defaultSettings, defaultSupervisors, getAssessments, getSettings, getSupervisors, getTeachers, makeId, saveAssessments, saveSettings, saveSupervisors, saveTeachers } from './lib/storage'
+import type { AppPage, AppSettings, Assessment, RubricItem, ScoredResponse, Score, Stage, Supervisor, Teacher } from './types'
 
 const steps: Array<{ id: Stage; label: string; short: string }> = [
   { id: 'pra-observasi', label: 'Pra-observasi', short: 'RPP / Modul Ajar' },
@@ -15,8 +15,8 @@ const steps: Array<{ id: Stage; label: string; short: string }> = [
   { id: 'pasca-observasi', label: 'Pasca-observasi', short: 'Refleksi & Tindak Lanjut' },
 ]
 
-const freshAssessment = (teacherId = '', observer = defaultSupervisors[0]?.name ?? ''): Assessment => ({
-  id: makeId(), teacherId, period: '2026', className: '', subject: '', topic: '', observer, observationDate: new Date().toISOString().slice(0, 10),
+const freshAssessment = (teacherId = '', observer = defaultSupervisors[0]?.name ?? '', period = defaultSettings.defaultPeriod): Assessment => ({
+  id: makeId(), teacherId, period, className: '', subject: '', topic: '', observer, observationDate: new Date().toISOString().slice(0, 10),
   status: 'draft', currentStage: 'pra-observasi', preObservation: {}, observation: {}, reflection: {}, feedback: {},
   followUps: followUpAspects.map((aspect) => ({ aspect, action: '', owner: '', dueDate: '' })), supervisorNote: '', recommendation: '',
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -27,6 +27,7 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false)
   const [teachers, setTeachers] = useState<Teacher[]>(() => getTeachers())
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => getSupervisors())
+  const [settings, setSettings] = useState<AppSettings>(() => getSettings())
   const [assessments, setAssessments] = useState<Assessment[]>(() => getAssessments())
   const [active, setActive] = useState<Assessment | null>(null)
   const [search, setSearch] = useState('')
@@ -44,9 +45,10 @@ function App() {
 
   const persistTeachers = (next: Teacher[]) => { setTeachers(next); saveTeachers(next) }
   const persistSupervisors = (next: Supervisor[]) => { setSupervisors(next); saveSupervisors(next) }
+  const persistSettings = (next: AppSettings) => { setSettings(next); saveSettings(next) }
 
   const startAssessment = () => {
-    setActive(freshAssessment('', supervisors.find((item) => item.active)?.name ?? ''))
+    setActive(freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod))
     setPage('assessment')
   }
 
@@ -65,7 +67,7 @@ function App() {
       <aside className={`sidebar ${mobileNav ? 'is-open' : ''}`}>
         <div className="brand">
           <div className="brand-mark"><ShieldCheck size={21} /></div>
-          <div><strong>supervisi</strong><span>SMKN Pasirian</span></div>
+          <div><strong>supervisi</strong><span>{settings.schoolName}</span></div>
         </div>
         <div className="sidebar-label">Ruang kerja</div>
         <nav>
@@ -74,23 +76,25 @@ function App() {
           <NavItem icon={<Users size={18} />} label="Daftar guru" active={page === 'teachers'} onClick={() => navigate('teachers')} />
           <NavItem icon={<Settings2 size={18} />} label="Supervisor" active={page === 'supervisors'} onClick={() => navigate('supervisors')} />
           <NavItem icon={<BarChart3 size={18} />} label="Laporan" active={page === 'reports'} onClick={() => navigate('reports')} />
+          <NavItem icon={<Settings2 size={18} />} label="Pengaturan" active={page === 'settings'} onClick={() => navigate('settings')} />
         </nav>
         <div className="sidebar-spacer" />
         <div className="help-card"><Sparkles size={18} /><strong>Ruang refleksi</strong><span>Supervisi adalah percakapan untuk tumbuh bersama.</span></div>
-        <div className="sidebar-footer"><Settings2 size={17} /><span>Pengaturan</span></div>
+        <button className={`sidebar-footer ${page === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}><Settings2 size={17} /><span>Pengaturan</span></button>
       </aside>
       {mobileNav && <button className="mobile-overlay" onClick={() => setMobileNav(false)} aria-label="Tutup menu" />}
       <main className="main-content">
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Buka menu"><Menu size={22} /></button>
-          <div className="breadcrumbs"><span>SMKN Pasirian</span><span className="slash">/</span><strong>{page === 'dashboard' ? 'Ringkasan' : page === 'assessment' ? 'Penilaian' : page === 'teachers' ? 'Daftar guru' : page === 'supervisors' ? 'Supervisor' : 'Laporan'}</strong></div>
+          <div className="breadcrumbs"><span>{settings.schoolName}</span><span className="slash">/</span><strong>{page === 'dashboard' ? 'Ringkasan' : page === 'assessment' ? 'Penilaian' : page === 'teachers' ? 'Daftar guru' : page === 'supervisors' ? 'Supervisor' : page === 'settings' ? 'Pengaturan' : 'Laporan'}</strong></div>
           <div className="topbar-actions"><button className="icon-button" aria-label="Notifikasi"><Bell size={18} /><i /></button><div className="profile"><div className="avatar navy">KS</div><div><strong>Kepala Sekolah</strong><span>Administrator</span></div><ChevronDown size={16} /></div></div>
         </header>
         {page === 'dashboard' && <Dashboard assessments={assessments} teachers={teachers} onNew={startAssessment} onOpen={editAssessment} />}
         {page === 'teachers' && <Teachers teachers={teachers} assessments={assessments} onNew={startAssessment} onTeachersChange={persistTeachers} />}
         {page === 'supervisors' && <Supervisors teachers={teachers} supervisors={supervisors} onSupervisorsChange={persistSupervisors} />}
+        {page === 'settings' && <SettingsPage settings={settings} onSettingsChange={persistSettings} />}
         {page === 'reports' && <Reports assessments={assessments} teachers={teachers} onOpen={editAssessment} />}
-        {page === 'assessment' && <AssessmentWorkspace assessment={active ?? freshAssessment('', supervisors.find((item) => item.active)?.name ?? '')} teachers={teachers} supervisors={supervisors} onBack={() => navigate('dashboard')} onSave={persistAssessment} />}
+        {page === 'assessment' && <AssessmentWorkspace assessment={active ?? freshAssessment('', supervisors.find((item) => item.active)?.name ?? '', settings.defaultPeriod)} teachers={teachers} supervisors={supervisors} settings={settings} onBack={() => navigate('dashboard')} onSave={persistAssessment} />}
       </main>
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
@@ -133,7 +137,7 @@ function getMissingObservationInfo(assessment: Assessment) {
   return missing
 }
 
-function AssessmentWorkspace({ assessment: initial, teachers, supervisors, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
+function AssessmentWorkspace({ assessment: initial, teachers, supervisors, settings, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; settings: AppSettings; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
   const [assessment, setAssessment] = useState(initial)
   const [stage, setStage] = useState<Stage>(initial.currentStage)
   const [showMeta, setShowMeta] = useState(false)
@@ -159,7 +163,7 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, onBac
     {observationInfoComplete && stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
     {observationInfoComplete && stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
     <div className="workspace-footer"><button className="secondary-button" onClick={() => { if (stageIndex > 0) moveTo(steps[stageIndex - 1].id) }} disabled={stageIndex === 0}><ArrowLeft size={16} /> Sebelumnya</button><div className="footer-progress"><span>{stageIndex + 1} dari {steps.length}</span><div className="progress-line"><i style={{ width: `${((stageIndex + 1) / steps.length) * 100}%` }} /></div></div><button className="primary-button" onClick={goNext}>{!observationInfoComplete ? 'Lengkapi informasi' : stageIndex === steps.length - 1 ? 'Selesaikan penilaian' : 'Lanjutkan'} <ArrowRight size={16} /></button></div>
-    <PrintReport assessment={assessment} teacher={teacher} />
+    <PrintReport assessment={assessment} teacher={teacher} settings={settings} />
   </div>
 }
 
@@ -279,10 +283,10 @@ function PostObservation({ assessment, onChange }: { assessment: Assessment; onC
 
 function PostObservationLegacy({ assessment, onChange }: { assessment: Assessment; onChange: (next: Assessment) => void }) { const updateReflection = (key: string, value: string) => onChange({ ...assessment, reflection: { ...assessment.reflection, [key]: value } }); const updateFeedback = (aspect: string, field: 'strength' | 'development', value: string) => { const existing = assessment.feedback[aspect] ?? { strength: '', development: '' }; onChange({ ...assessment, feedback: { ...assessment.feedback, [aspect]: { ...existing, [field]: value } } }) }; const updateFollowUp = (index: number, field: 'action' | 'owner' | 'dueDate', value: string) => onChange({ ...assessment, followUps: assessment.followUps.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item) }); return <section className="post-stage"><div className="stage-intro"><div><h2>Refleksi & tindak lanjut</h2><p className="muted">Tutup proses supervisi dengan percakapan yang konkret dan disepakati bersama.</p></div></div><div className="post-section"><div className="section-title"><span>Refleksi guru</span><em>Diisi oleh guru</em></div>{reflectionQuestions.map(([key, question]) => <label className="long-field" key={key}><span>{question}</span><textarea value={assessment.reflection[key] ?? ''} onChange={(event) => updateReflection(key, event.target.value)} placeholder="Tulis refleksi guru..." rows={3} /></label>)}</div><div className="post-section"><div className="section-title"><span>Umpan balik supervisor</span><em>Kekuatan & area pengembangan</em></div><div className="feedback-table"><div className="feedback-header"><span>Aspek</span><span>Apresiasi / kekuatan</span><span>Area pengembangan</span></div>{feedbackAspects.map((aspect) => <div className="feedback-row" key={aspect}><strong>{aspect}</strong><textarea value={assessment.feedback[aspect]?.strength ?? ''} onChange={(event) => updateFeedback(aspect, 'strength', event.target.value)} placeholder="Apa yang sudah baik?" rows={3} /><textarea value={assessment.feedback[aspect]?.development ?? ''} onChange={(event) => updateFeedback(aspect, 'development', event.target.value)} placeholder="Apa yang perlu dikembangkan?" rows={3} /></div>)}</div></div><div className="post-section"><div className="section-title"><span>Rencana tindak lanjut</span><em>Kesepakatan bersama</em></div><div className="follow-up-list">{assessment.followUps.map((item, index) => <div className="follow-up-row" key={item.aspect}><strong>{item.aspect}</strong><input value={item.action} onChange={(event) => updateFollowUp(index, 'action', event.target.value)} placeholder="Tindak lanjut yang disepakati" /><input value={item.owner} onChange={(event) => updateFollowUp(index, 'owner', event.target.value)} placeholder="Penanggung jawab" /><input type="date" value={item.dueDate} onChange={(event) => updateFollowUp(index, 'dueDate', event.target.value)} /></div>)}</div><div className="form-grid two"><label>Catatan supervisor<textarea value={assessment.supervisorNote} onChange={(event) => onChange({ ...assessment, supervisorNote: event.target.value })} rows={4} placeholder="Catatan tambahan..." /></label><label>Rekomendasi / saran perbaikan<textarea value={assessment.recommendation} onChange={(event) => onChange({ ...assessment, recommendation: assessment.recommendation })} rows={4} placeholder="Rekomendasi untuk periode berikutnya..." /></label></div></div></section> }
 
-function PrintReport({ assessment, teacher }: { assessment: Assessment; teacher?: Teacher }) {
+function PrintReport({ assessment, teacher, settings }: { assessment: Assessment; teacher?: Teacher; settings: AppSettings }) {
   const teacherName = teacher?.name ?? ''
   const subject = assessment.subject || teacher?.subject || ''
-  const fields = { teacher: teacherName, school: 'SMKN Pasirian', className: assessment.className, subject, topic: assessment.topic }
+  const fields = { teacher: teacherName, school: settings.schoolName, className: assessment.className, subject, topic: assessment.topic }
   const observationGroups = [
     { section: 'Perencanaan di Kelas', title: 'A. PERENCANAAN DI KELAS', evidence: 'Catatan' },
     { section: 'Pelaksanaan Pembelajaran', title: 'B. PELAKSANAAN PEMBELAJARAN', evidence: 'Bukti Pembelajaran' },
@@ -297,9 +301,9 @@ function PrintReport({ assessment, teacher }: { assessment: Assessment; teacher?
   ]
 
   return <div className="print-report" aria-hidden="true">
-    <PrintPreObservation fields={fields} responses={assessment.preObservation} year={assessment.period} />
-    <PrintObservation fields={fields} responses={assessment.observation} assessment={assessment} groups={observationGroups} deepGroups={deepObservationGroups} year={assessment.period} />
-    <PrintPostObservation fields={fields} assessment={assessment} />
+    <PrintPreObservation fields={fields} responses={assessment.preObservation} year={assessment.period} settings={settings} />
+    <PrintObservation fields={fields} responses={assessment.observation} assessment={assessment} groups={observationGroups} deepGroups={deepObservationGroups} year={assessment.period} settings={settings} />
+    <PrintPostObservation fields={fields} assessment={assessment} settings={settings} />
     <PrintFlow />
   </div>
 }
@@ -311,14 +315,14 @@ function PrintFields({ fields, includeSchool = false }: { fields: { teacher: str
   return <div className="print-fields">{rows.map(([label, value]) => <div className="print-field" key={label}><span>{label}</span><b>:</b><strong>{value || '\u00a0'}</strong></div>)}</div>
 }
 
-function PrintPreObservation({ fields, responses, year }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['preObservation']; year: string }) {
+function PrintPreObservation({ fields, responses, year, settings }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['preObservation']; year: string; settings: AppSettings }) {
   return <section className="print-page print-pre-page">
     <PrintHeading title="Instrumen Telaah" subtitle="RPP/MODUL AJAR (Pra Observasi)" />
     <PrintFields fields={fields} includeSchool />
     <PrintRubricTable className="print-pre-table" items={preObservationItems} responses={responses} firstHeader="Komponen RPP/MA" indicatorHeader="Indikator Yang Diamati" evidenceHeader="Catatan" showTotal />
     <PrintAdditionalNotes />
-    <PrintDate year={year} />
-    <PrintSignature observer="Supervisor" detail="( Kepala sekolah & Pendamping Sekolah)" />
+    <PrintDate year={year} city={settings.signatureCity} />
+    <PrintSignature observer="Supervisor" detail={`( ${settings.signatureDetail})`} />
   </section>
 }
 
@@ -330,7 +334,7 @@ function PrintRubricTable({ className, items, responses, firstHeader, indicatorH
   return <table className={`print-table print-rubric-table ${className}`}><colgroup><col className="print-col-no" /><col className="print-col-first" /><col className="print-col-indicator" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><thead><tr><th>No</th><th>{firstHeader}</th><th>{indicatorHeader}</th><th>Skor<br />(1–4)</th><th>{evidenceHeader}</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td className="print-center">{item.number}</td><td>{item.title}</td><td>{item.indicator}</td><td className="print-score">{responses[item.id]?.score ?? ''}</td><td>{responses[item.id]?.note || '\u00a0'}</td></tr>)}</tbody>{showTotal && <tfoot><tr className="print-total-row"><td colSpan={3}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tfoot>}</table>
 }
 
-function PrintObservation({ fields, responses, assessment, groups, deepGroups, year }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['observation']; assessment: Assessment; groups: Array<{ section: string; title: string; evidence: string }>; deepGroups: Array<{ section: string; title: string; evidence: string; itemNumbers: number[] }>; year: string }) {
+function PrintObservation({ fields, responses, assessment, groups, deepGroups, year, settings }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['observation']; assessment: Assessment; groups: Array<{ section: string; title: string; evidence: string }>; deepGroups: Array<{ section: string; title: string; evidence: string; itemNumbers: number[] }>; year: string; settings: AppSettings }) {
   const followUpText = assessment.followUps.map((item) => item.action.trim()).filter(Boolean).join(' | ')
   return <section className="print-page print-observation-page">
     <PrintHeading title="INSTRUMEN SUPERVISI PENGELOLAAN DAN PEMBELAJARAN DI KELAS" subtitle="(OBSERVASI)" italic="(Observasi & Umpan Balik Implementasi Pembelajaran Mendalam)" />
@@ -341,8 +345,8 @@ function PrintObservation({ fields, responses, assessment, groups, deepGroups, y
     <PrintTotalTable items={observationItems} responses={responses} />
     <PrintScoringGuide />
     <div className="print-summary-block"><h3>Catatan Supervisor:</h3><div className="print-dotted-line">{assessment.supervisorNote || '\u00a0'}</div><h3>Rekomendasi/Saran Perbaikan:</h3><div className="print-dotted-line">{assessment.recommendation || '\u00a0'}</div><h3>Tindak Lanjut:</h3><div className="print-dotted-line">{followUpText || '\u00a0'}</div></div>
-    <PrintDate year={year} />
-    <PrintSignature observer="Supervisor" detail="(Kepala Sekolah & Pendamping Sekolah)" />
+    <PrintDate year={year} city={settings.signatureCity} />
+    <PrintSignature observer="Supervisor" detail={`(${settings.signatureDetail})`} />
   </section>
 }
 
@@ -358,7 +362,7 @@ function PrintScoringGuide() {
   return <div className="print-scoring-guide"><strong>SKORING</strong><span>1 = Tidak Tampak</span><span>2 = Kurang</span><span>3 = Baik</span><span>4 = Sangat Baik</span></div>
 }
 
-function PrintPostObservation({ fields, assessment }: { fields: Parameters<typeof PrintFields>[0]['fields']; assessment: Assessment }) {
+function PrintPostObservation({ fields, assessment, settings }: { fields: Parameters<typeof PrintFields>[0]['fields']; assessment: Assessment; settings: AppSettings }) {
   return <section className="print-page print-post-page">
     <PrintHeading title="INSTRUMEN PASCA OBSERVASI SUPERVISI PEMBELAJARAN" />
     <PrintFields fields={fields} />
@@ -369,8 +373,8 @@ function PrintPostObservation({ fields, assessment }: { fields: Parameters<typeo
     <h3 className="print-section-title">C. Rencana Tindak Lanjut</h3>
     <table className="print-table print-followup-table"><colgroup><col className="print-col-post-no" /><col className="print-col-followup-aspect" /><col className="print-col-action" /><col className="print-col-owner" /><col className="print-col-date" /></colgroup><thead><tr><th>No</th><th>Aspek</th><th>Tindak Lanjut yang Disepakati</th><th>Penanggung Jawab</th><th>Waktu Pelaksanaan</th></tr></thead><tbody>{assessment.followUps.map((item, index) => <tr key={item.aspect}><td className="print-center">{index + 1}</td><td>{item.aspect}</td><td>{item.action || '\u00a0'}</td><td>{item.owner || '\u00a0'}</td><td>{item.dueDate ? formatDate(item.dueDate) : '\u00a0'}</td></tr>)}</tbody></table>
     <div className="print-post-notes"><h3>Catatan Supervisor</h3><div className="print-dotted-line">{assessment.supervisorNote || '\u00a0'}</div><h3>Kesepakatan Bersama</h3><div className="print-dotted-line">{assessment.recommendation || '\u00a0'}</div></div>
-    <div className="print-date-line">........................, {assessment.period}</div>
-    <div className="print-signatures"><PrintSignature observer="Supervisor" detail="(Kepala Sekolah & Pendamping Sekolah)" /><PrintSignature observer="Guru" /></div>
+    <PrintDate year={assessment.period} city={settings.signatureCity} />
+    <div className="print-signatures"><PrintSignature observer="Supervisor" detail={`(${settings.signatureDetail})`} /><PrintSignature observer="Guru" /></div>
   </section>
 }
 
@@ -382,12 +386,21 @@ function PrintSignature({ observer, detail }: { observer: string; detail?: strin
   return <div className="print-signature"><strong>{observer}</strong>{detail && <span>{detail}</span>}<div className="signature-space" /><span>(................................................)</span></div>
 }
 
-function PrintDate({ year }: { year: string }) {
-  return <div className="print-date-line">........................, {year}</div>
+function PrintDate({ year, city }: { year: string; city: string }) {
+  return <div className="print-date-line">{city || '........................'}, {year}</div>
 }
 
 function PrintFlow() {
   return <section className="print-page print-flow-page"><h2>Alur Pelaksanaan Observasi:</h2><ol><li>Instrumen Observasi → digunakan saat supervisi berlangsung.</li><li>Instrumen Pasca Observasi → digunakan setelah observasi, untuk refleksi guru dan umpan balik supervisor.</li><li>Tindak Lanjut → menjadi catatan bersama yang disepakati.</li></ol></section>
+}
+
+function SettingsPage({ settings, onSettingsChange }: { settings: AppSettings; onSettingsChange: (settings: AppSettings) => void }) {
+  const [draft, setDraft] = useState(settings)
+  const [saved, setSaved] = useState(false)
+  useEffect(() => setDraft(settings), [settings])
+  const update = (patch: Partial<AppSettings>) => { setDraft((current) => ({ ...current, ...patch })); setSaved(false) }
+  const save = () => { onSettingsChange(draft); setSaved(true); window.setTimeout(() => setSaved(false), 2600) }
+  return <div className="page-wrap settings-page"><section className="welcome-row"><div><p className="eyebrow">Pengaturan aplikasi</p><h1>Pengaturan</h1><p className="muted">Kelola identitas sekolah dan format default yang digunakan dalam penilaian serta laporan.</p></div><button className="primary-button" onClick={save}><Check size={17} /> Simpan pengaturan</button></section><div className="settings-grid"><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Identitas sekolah</h2><p className="muted">Ditampilkan pada header aplikasi dan laporan PDF.</p></div></div><div className="settings-fields"><label>Nama sekolah<input value={draft.schoolName} onChange={(event) => update({ schoolName: event.target.value })} placeholder="Contoh: SMKN Pasirian" /></label><label>Kota / tempat tanda tangan<input value={draft.signatureCity} onChange={(event) => update({ signatureCity: event.target.value })} placeholder="Contoh: Pasirian" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon lilac"><ClipboardCheck size={18} /></div><div><h2>Default penilaian</h2><p className="muted">Dipakai saat membuat penilaian baru. Penilaian lama tidak berubah.</p></div></div><div className="settings-fields"><label>Periode penilaian default<input value={draft.defaultPeriod} onChange={(event) => update({ defaultPeriod: event.target.value })} placeholder="Contoh: 2026" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon peach"><FileText size={18} /></div><div><h2>Tanda tangan laporan</h2><p className="muted">Keterangan ini muncul pada bagian tanda tangan ekspor PDF.</p></div></div><div className="settings-fields"><label>Keterangan di bawah supervisor<input value={draft.signatureDetail} onChange={(event) => update({ signatureDetail: event.target.value })} placeholder="Contoh: Kepala Sekolah & Pendamping Sekolah" /></label></div></section></div>{saved && <div className="settings-saved" role="status"><Check size={16} /> Pengaturan tersimpan.</div>}</div>
 }
 
 function Supervisors({ teachers, supervisors, onSupervisorsChange }: { teachers: Teacher[]; supervisors: Supervisor[]; onSupervisorsChange: (supervisors: Supervisor[]) => void }) {

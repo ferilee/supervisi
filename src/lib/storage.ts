@@ -1,8 +1,9 @@
-import type { Assessment, Supervisor, Teacher } from '../types'
+import type { AppSettings, Assessment, Supervisor, Teacher } from '../types'
 
 const ASSESSMENTS_KEY = 'supervisi-assessments-v1'
 const TEACHERS_KEY = 'supervisi-teachers-v1'
 const SUPERVISORS_KEY = 'supervisi-supervisors-v1'
+const SETTINGS_KEY = 'supervisi-settings-v1'
 
 export const defaultTeachers: Teacher[] = [
   { id: 't-1', name: 'Siti Rahmawati, S.Pd.', subject: 'Bahasa Indonesia', initials: 'SR', color: '#b9e3d5' },
@@ -14,6 +15,13 @@ export const defaultTeachers: Teacher[] = [
 export const defaultSupervisors: Supervisor[] = [
   { id: 's-1', name: 'Kepala Sekolah', position: 'Kepala Sekolah', active: true },
 ]
+
+export const defaultSettings: AppSettings = {
+  schoolName: 'SMKN Pasirian',
+  defaultPeriod: '2026',
+  signatureCity: 'Pasirian',
+  signatureDetail: 'Kepala Sekolah & Pendamping Sekolah',
+}
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -38,6 +46,14 @@ export function getSupervisors() {
 
 export function saveSupervisors(supervisors: Supervisor[]) {
   localStorage.setItem(SUPERVISORS_KEY, JSON.stringify(supervisors))
+}
+
+export function getSettings() {
+  return { ...defaultSettings, ...read<Partial<AppSettings>>(SETTINGS_KEY, {}) }
+}
+
+export function saveSettings(settings: AppSettings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
 }
 
 export function getAssessments() {

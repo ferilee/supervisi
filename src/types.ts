@@ -17,6 +17,13 @@ export interface Supervisor {
   active: boolean
 }
 
+export interface AppSettings {
+  schoolName: string
+  defaultPeriod: string
+  signatureCity: string
+  signatureDetail: string
+}
+
 export interface RubricItem {
   id: string
   number: number
@@ -59,4 +66,4 @@ export interface Assessment {
   updatedAt: string
 }
 
-export type AppPage = 'dashboard' | 'assessment' | 'teachers' | 'supervisors' | 'reports'
+export type AppPage = 'dashboard' | 'assessment' | 'teachers' | 'supervisors' | 'settings' | 'reports'
