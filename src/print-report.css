@@ -305,14 +305,42 @@
     margin-top: 10mm;
   }
 
-  .print-signature strong,
-  .print-signature span {
+  .print-signature > strong,
+  .print-signature > span {
     display: block;
     font-size: 10pt;
   }
 
-  .signature-space {
-    height: 18mm;
+  .print-signature-write {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 27mm;
+  }
+
+  .print-signature-write img {
+    position: absolute;
+    z-index: 1;
+    bottom: 7mm;
+    width: 42mm;
+    height: 19mm;
+    object-fit: contain;
+  }
+
+  .print-signature-name {
+    z-index: 0;
+    min-width: 55mm;
+    padding: 0 3mm 1mm;
+    border-bottom: 1px dotted #111;
+    font-size: 10pt !important;
+    font-weight: 400 !important;
+  }
+
+  .print-signature-position {
+    margin-top: 1mm;
+    font-size: 9pt !important;
   }
 
   .print-date-line {

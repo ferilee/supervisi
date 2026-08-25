@@ -318,6 +318,7 @@ function PostObservationLegacy({ assessment, onChange }: { assessment: Assessmen
 function PrintReport({ assessment, teacher, settings }: { assessment: Assessment; teacher?: Teacher; settings: AppSettings }) {
   const teacherName = teacher?.name ?? ''
   const subject = assessment.subject || teacher?.subject || ''
+  const signatureName = settings.signatureName || assessment.observer
   const fields = { teacher: teacherName, school: settings.schoolName, className: assessment.className, subject, topic: assessment.topic }
   const observationGroups = [
     { section: 'Perencanaan di Kelas', title: 'A. PERENCANAAN DI KELAS', evidence: 'Catatan' },
@@ -333,9 +334,9 @@ function PrintReport({ assessment, teacher, settings }: { assessment: Assessment
   ]
 
   return <div className="print-report" aria-hidden="true">
-    <PrintPreObservation fields={fields} responses={assessment.preObservation} year={assessment.period} settings={settings} />
-    <PrintObservation fields={fields} responses={assessment.observation} assessment={assessment} groups={observationGroups} deepGroups={deepObservationGroups} year={assessment.period} settings={settings} />
-    <PrintPostObservation fields={fields} assessment={assessment} settings={settings} />
+    <PrintPreObservation fields={fields} responses={assessment.preObservation} year={assessment.period} settings={settings} signatureName={signatureName} />
+    <PrintObservation fields={fields} responses={assessment.observation} assessment={assessment} groups={observationGroups} deepGroups={deepObservationGroups} year={assessment.period} settings={settings} signatureName={signatureName} />
+    <PrintPostObservation fields={fields} assessment={assessment} settings={settings} signatureName={signatureName} />
     <PrintFlow />
   </div>
 }
@@ -347,14 +348,14 @@ function PrintFields({ fields, includeSchool = false }: { fields: { teacher: str
   return <div className="print-fields">{rows.map(([label, value]) => <div className="print-field" key={label}><span>{label}</span><b>:</b><strong>{value || '\u00a0'}</strong></div>)}</div>
 }
 
-function PrintPreObservation({ fields, responses, year, settings }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['preObservation']; year: string; settings: AppSettings }) {
+function PrintPreObservation({ fields, responses, year, settings, signatureName }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['preObservation']; year: string; settings: AppSettings; signatureName: string }) {
   return <section className="print-page print-pre-page">
     <PrintHeading title="Instrumen Telaah" subtitle="RPP/MODUL AJAR (Pra Observasi)" />
     <PrintFields fields={fields} includeSchool />
     <PrintRubricTable className="print-pre-table" items={preObservationItems} responses={responses} firstHeader="Komponen RPP/MA" indicatorHeader="Indikator Yang Diamati" evidenceHeader="Catatan" showTotal />
     <PrintAdditionalNotes />
     <PrintDate year={year} city={settings.signatureCity} />
-    <PrintSignature observer="Supervisor" detail={`( ${settings.signatureDetail})`} />
+    <PrintSignature observer="Supervisor" detail={`( ${settings.signatureDetail})`} name={signatureName} position={settings.signaturePosition} image={settings.signatureImage} />
   </section>
 }
 
@@ -366,7 +367,7 @@ function PrintRubricTable({ className, items, responses, firstHeader, indicatorH
   return <table className={`print-table print-rubric-table ${className}`}><colgroup><col className="print-col-no" /><col className="print-col-first" /><col className="print-col-indicator" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><thead><tr><th>No</th><th>{firstHeader}</th><th>{indicatorHeader}</th><th>Skor<br />(1–4)</th><th>{evidenceHeader}</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td className="print-center">{item.number}</td><td>{item.title}</td><td>{item.indicator}</td><td className="print-score">{responses[item.id]?.score ?? ''}</td><td>{responses[item.id]?.note || '\u00a0'}</td></tr>)}</tbody>{showTotal && <tfoot><tr className="print-total-row"><td colSpan={3}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tfoot>}</table>
 }
 
-function PrintObservation({ fields, responses, assessment, groups, deepGroups, year, settings }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['observation']; assessment: Assessment; groups: Array<{ section: string; title: string; evidence: string }>; deepGroups: Array<{ section: string; title: string; evidence: string; itemNumbers: number[] }>; year: string; settings: AppSettings }) {
+function PrintObservation({ fields, responses, assessment, groups, deepGroups, year, settings, signatureName }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['observation']; assessment: Assessment; groups: Array<{ section: string; title: string; evidence: string }>; deepGroups: Array<{ section: string; title: string; evidence: string; itemNumbers: number[] }>; year: string; settings: AppSettings; signatureName: string }) {
   const followUpText = assessment.followUps.map((item) => item.action.trim()).filter(Boolean).join(' | ')
   return <section className="print-page print-observation-page">
     <PrintHeading title="INSTRUMEN SUPERVISI PENGELOLAAN DAN PEMBELAJARAN DI KELAS" subtitle="(OBSERVASI)" italic="(Observasi & Umpan Balik Implementasi Pembelajaran Mendalam)" />
@@ -378,7 +379,7 @@ function PrintObservation({ fields, responses, assessment, groups, deepGroups, y
     <PrintScoringGuide />
     <div className="print-summary-block"><h3>Catatan Supervisor:</h3><div className="print-dotted-line">{assessment.supervisorNote || '\u00a0'}</div><h3>Rekomendasi/Saran Perbaikan:</h3><div className="print-dotted-line">{assessment.recommendation || '\u00a0'}</div><h3>Tindak Lanjut:</h3><div className="print-dotted-line">{followUpText || '\u00a0'}</div></div>
     <PrintDate year={year} city={settings.signatureCity} />
-    <PrintSignature observer="Supervisor" detail={`(${settings.signatureDetail})`} />
+    <PrintSignature observer="Supervisor" detail={`(${settings.signatureDetail})`} name={signatureName} position={settings.signaturePosition} image={settings.signatureImage} />
   </section>
 }
 
@@ -394,7 +395,7 @@ function PrintScoringGuide() {
   return <div className="print-scoring-guide"><strong>SKORING</strong><span>1 = Tidak Tampak</span><span>2 = Kurang</span><span>3 = Baik</span><span>4 = Sangat Baik</span></div>
 }
 
-function PrintPostObservation({ fields, assessment, settings }: { fields: Parameters<typeof PrintFields>[0]['fields']; assessment: Assessment; settings: AppSettings }) {
+function PrintPostObservation({ fields, assessment, settings, signatureName }: { fields: Parameters<typeof PrintFields>[0]['fields']; assessment: Assessment; settings: AppSettings; signatureName: string }) {
   return <section className="print-page print-post-page">
     <PrintHeading title="INSTRUMEN PASCA OBSERVASI SUPERVISI PEMBELAJARAN" />
     <PrintFields fields={fields} />
@@ -406,7 +407,7 @@ function PrintPostObservation({ fields, assessment, settings }: { fields: Parame
     <table className="print-table print-followup-table"><colgroup><col className="print-col-post-no" /><col className="print-col-followup-aspect" /><col className="print-col-action" /><col className="print-col-owner" /><col className="print-col-date" /></colgroup><thead><tr><th>No</th><th>Aspek</th><th>Tindak Lanjut yang Disepakati</th><th>Penanggung Jawab</th><th>Waktu Pelaksanaan</th></tr></thead><tbody>{assessment.followUps.map((item, index) => <tr key={item.aspect}><td className="print-center">{index + 1}</td><td>{item.aspect}</td><td>{item.action || '\u00a0'}</td><td>{item.owner || '\u00a0'}</td><td>{item.dueDate ? formatDate(item.dueDate) : '\u00a0'}</td></tr>)}</tbody></table>
     <div className="print-post-notes"><h3>Catatan Supervisor</h3><div className="print-dotted-line">{assessment.supervisorNote || '\u00a0'}</div><h3>Kesepakatan Bersama</h3><div className="print-dotted-line">{assessment.recommendation || '\u00a0'}</div></div>
     <PrintDate year={assessment.period} city={settings.signatureCity} />
-    <div className="print-signatures"><PrintSignature observer="Supervisor" detail={`(${settings.signatureDetail})`} /><PrintSignature observer="Guru" /></div>
+    <div className="print-signatures"><PrintSignature observer="Supervisor" detail={`(${settings.signatureDetail})`} name={signatureName} position={settings.signaturePosition} image={settings.signatureImage} /><PrintSignature observer="Guru" /></div>
   </section>
 }
 
@@ -414,8 +415,8 @@ function PrintAdditionalNotes() {
   return <div className="print-additional-notes"><h3>Catatan Tambahan</h3>{['Tuliskan kelebihan Perencanaan Pembelajaran:', 'Tuliskan hal yang perlu ditingkatkan dari Perencanaan Pembelajaran:', 'Tuliskan rekomendasi dan lanjutkan dengan revisi Perencanaan Pembelajaran sesuai prinsip PM:'].map((label, index) => <div className="print-note-block" key={label}><strong>{String.fromCharCode(97 + index)}) &nbsp;{label}</strong><div className="print-dotted-line" /></div>)}</div>
 }
 
-function PrintSignature({ observer, detail }: { observer: string; detail?: string }) {
-  return <div className="print-signature"><strong>{observer}</strong>{detail && <span>{detail}</span>}<div className="signature-space" /><span>(................................................)</span></div>
+function PrintSignature({ observer, detail, name = '', position = '', image = '' }: { observer: string; detail?: string; name?: string; position?: string; image?: string }) {
+  return <div className="print-signature"><strong>{observer}</strong>{detail && <span>{detail}</span>}<div className="print-signature-write">{image && <img src={image} alt="Tanda tangan penandatangan" />}{name ? <strong className="print-signature-name">{name}</strong> : <span className="print-signature-name">(................................................)</span>}{position && <span className="print-signature-position">{position}</span>}</div></div>
 }
 
 function PrintDate({ year, city }: { year: string; city: string }) {
@@ -429,10 +430,21 @@ function PrintFlow() {
 function SettingsPage({ settings, onSettingsChange }: { settings: AppSettings; onSettingsChange: (settings: AppSettings) => void }) {
   const [draft, setDraft] = useState(settings)
   const [saved, setSaved] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   useEffect(() => setDraft(settings), [settings])
   const update = (patch: Partial<AppSettings>) => { setDraft((current) => ({ ...current, ...patch })); setSaved(false) }
+  const handleSignatureUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    if (file.type !== 'image/png') { setUploadError('Tanda tangan harus berupa file PNG transparan.'); return }
+    if (file.size > 1024 * 1024) { setUploadError('Ukuran tanda tangan maksimal 1 MB.'); return }
+    const reader = new FileReader()
+    reader.onload = () => { update({ signatureImage: typeof reader.result === 'string' ? reader.result : '' }); setUploadError('') }
+    reader.readAsDataURL(file)
+  }
   const save = () => { onSettingsChange(draft); setSaved(true); window.setTimeout(() => setSaved(false), 2600) }
-  return <div className="page-wrap settings-page"><section className="welcome-row"><div><p className="eyebrow">Pengaturan aplikasi</p><h1>Pengaturan</h1><p className="muted">Kelola identitas sekolah dan format default yang digunakan dalam penilaian serta laporan.</p></div><button className="primary-button" onClick={save}><Check size={17} /> Simpan pengaturan</button></section><div className="settings-grid"><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Identitas sekolah</h2><p className="muted">Ditampilkan pada header aplikasi dan laporan PDF.</p></div></div><div className="settings-fields"><label>Nama sekolah<input value={draft.schoolName} onChange={(event) => update({ schoolName: event.target.value })} placeholder="Contoh: SMKN Pasirian" /></label><label>Kota / tempat tanda tangan<input value={draft.signatureCity} onChange={(event) => update({ signatureCity: event.target.value })} placeholder="Contoh: Pasirian" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon lilac"><ClipboardCheck size={18} /></div><div><h2>Default penilaian</h2><p className="muted">Dipakai saat membuat penilaian baru. Penilaian lama tidak berubah.</p></div></div><div className="settings-fields"><label>Periode penilaian default<input value={draft.defaultPeriod} onChange={(event) => update({ defaultPeriod: event.target.value })} placeholder="Contoh: 2026" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon peach"><FileText size={18} /></div><div><h2>Tanda tangan laporan</h2><p className="muted">Keterangan ini muncul pada bagian tanda tangan ekspor PDF.</p></div></div><div className="settings-fields"><label>Keterangan di bawah supervisor<input value={draft.signatureDetail} onChange={(event) => update({ signatureDetail: event.target.value })} placeholder="Contoh: Kepala Sekolah & Pendamping Sekolah" /></label></div></section></div>{saved && <div className="settings-saved" role="status"><Check size={16} /> Pengaturan tersimpan.</div>}</div>
+  return <div className="page-wrap settings-page"><section className="welcome-row"><div><p className="eyebrow">Pengaturan aplikasi</p><h1>Pengaturan</h1><p className="muted">Kelola identitas sekolah dan format default yang digunakan dalam penilaian serta laporan.</p></div><button className="primary-button" onClick={save}><Check size={17} /> Simpan pengaturan</button></section><div className="settings-grid"><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Identitas sekolah</h2><p className="muted">Ditampilkan pada header aplikasi dan laporan PDF.</p></div></div><div className="settings-fields"><label>Nama sekolah<input value={draft.schoolName} onChange={(event) => update({ schoolName: event.target.value })} placeholder="Contoh: SMKN Pasirian" /></label><label>Kota / tempat tanda tangan<input value={draft.signatureCity} onChange={(event) => update({ signatureCity: event.target.value })} placeholder="Contoh: Pasirian" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon lilac"><ClipboardCheck size={18} /></div><div><h2>Default penilaian</h2><p className="muted">Dipakai saat membuat penilaian baru. Penilaian lama tidak berubah.</p></div></div><div className="settings-fields"><label>Periode penilaian default<input value={draft.defaultPeriod} onChange={(event) => update({ defaultPeriod: event.target.value })} placeholder="Contoh: 2026" /></label></div></section><section className="panel settings-panel"><div className="settings-panel-head"><div className="settings-icon peach"><FileText size={18} /></div><div><h2>Tanda tangan laporan</h2><p className="muted">Nama, jabatan, dan PNG transparan ini ditampilkan pada laporan PDF.</p></div></div><div className="settings-fields signature-settings-fields"><label>Nama penandatangan<input value={draft.signatureName} onChange={(event) => update({ signatureName: event.target.value })} placeholder="Contoh: Siti Rahmawati, S.Pd." /></label><label>Jabatan penandatangan<input value={draft.signaturePosition} onChange={(event) => update({ signaturePosition: event.target.value })} placeholder="Contoh: Kepala Sekolah" /></label><label>Keterangan di bawah supervisor<input value={draft.signatureDetail} onChange={(event) => update({ signatureDetail: event.target.value })} placeholder="Contoh: Kepala Sekolah & Pendamping Sekolah" /></label><label>Gambar tanda tangan PNG<input type="file" accept="image/png" onChange={handleSignatureUpload} /><small>PNG transparan, maksimal 1 MB.</small></label></div>{draft.signatureImage && <div className="signature-preview"><img src={draft.signatureImage} alt="Pratinjau tanda tangan" /><button type="button" className="secondary-button compact" onClick={() => { update({ signatureImage: '' }); setUploadError('') }}>Hapus tanda tangan</button></div>}{uploadError && <p className="settings-upload-error" role="alert">{uploadError}</p>}</section></div>{saved && <div className="settings-saved" role="status"><Check size={16} /> Pengaturan tersimpan.</div>}</div>
 }
 
 function Supervisors({ teachers, supervisors, onSupervisorsChange }: { teachers: Teacher[]; supervisors: Supervisor[]; onSupervisorsChange: (supervisors: Supervisor[]) => void }) {

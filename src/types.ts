@@ -23,6 +23,9 @@ export interface AppSettings {
   signatureCity: string
   signatureDetail: string
   supervisorSetupComplete: boolean
+  signatureName: string
+  signaturePosition: string
+  signatureImage: string
 }
 
 export interface RubricItem {

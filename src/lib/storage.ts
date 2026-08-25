@@ -22,6 +22,9 @@ export const defaultSettings: AppSettings = {
   signatureCity: 'Pasirian',
   signatureDetail: 'Kepala Sekolah & Pendamping Sekolah',
   supervisorSetupComplete: false,
+  signatureName: '',
+  signaturePosition: '',
+  signatureImage: '',
 }
 
 function read<T>(key: string, fallback: T): T {
