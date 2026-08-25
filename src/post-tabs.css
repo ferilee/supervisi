@@ -1,0 +1,114 @@
+.post-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 4px 0 16px;
+  padding: 5px;
+  border: 1px solid #e4e8f0;
+  border-radius: 12px;
+  background: #f4f6fb;
+}
+
+.post-tab {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #858aa2;
+  text-align: left;
+}
+
+.post-tab:hover {
+  color: #5145d9;
+  background: #fff;
+}
+
+.post-tab.active {
+  color: #2a2b46;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(43, 45, 83, .08);
+}
+
+.post-tab-number {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  border-radius: 50%;
+  background: #e3e5f1;
+  color: #777d9b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.post-tab.active .post-tab-number {
+  background: #dcd8ff;
+  color: #5d50e8;
+}
+
+.post-tab strong,
+.post-tab small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-tab strong {
+  font-size: 11px;
+}
+
+.post-tab small {
+  margin-top: 3px;
+  color: #9a9fb4;
+  font-size: 9px;
+}
+
+.post-tab-panel {
+  min-width: 0;
+}
+
+.post-tab-panel .post-section {
+  margin-bottom: 0;
+}
+
+.post-tab-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid #edf0f4;
+}
+
+.post-tab-footer > span {
+  color: #9298aa;
+  font-size: 10px;
+}
+
+@media (max-width: 650px) {
+  .post-tabs {
+    display: flex;
+    overflow-x: auto;
+    margin-right: -2px;
+    padding: 4px;
+    scrollbar-width: thin;
+  }
+
+  .post-tab {
+    flex: 0 0 205px;
+    padding: 10px;
+  }
+
+  .post-tab-footer .secondary-button,
+  .post-tab-footer .primary-button {
+    flex: 1;
+    justify-content: center;
+  }
+}

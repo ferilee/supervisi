@@ -9,6 +9,7 @@ import './progressive.css'
 import './fintech-theme.css'
 import './teacher-management.css'
 import './print-report.css'
+import './post-tabs.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
