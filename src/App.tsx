@@ -261,17 +261,20 @@ function PrintReport({ assessment, teacher }: { assessment: Assessment; teacher?
     { section: 'Perencanaan di Kelas', title: 'A. PERENCANAAN DI KELAS', evidence: 'Catatan' },
     { section: 'Pelaksanaan Pembelajaran', title: 'B. PELAKSANAAN PEMBELAJARAN', evidence: 'Bukti Pembelajaran' },
     { section: 'Pengelolaan Kelas', title: 'C. PENGELOLAAN KELAS', evidence: 'Bukti Pembelajaran' },
-    { section: 'Implementasi Pembelajaran Mendalam', title: 'D. IMPLEMENTASI PEMBELAJARAN MENDALAM', evidence: 'Bukti Pembelajaran' },
-    { section: 'Kerangka Pembelajaran', title: 'E. KERANGKA PEMBELAJARAN', evidence: 'Bukti Pembelajaran' },
-    { section: 'Langkah Pembelajaran', title: 'F. LANGKAH PEMBELAJARAN', evidence: 'Bukti Pembelajaran' },
-    { section: 'Asesmen', title: 'G. ASESMEN', evidence: 'Catatan' },
-    { section: 'Refleksi Guru', title: 'H. REFLEKSI GURU', evidence: 'Catatan' },
+    { section: 'Asesmen', title: 'E. ASESMEN', evidence: 'Catatan' },
+    { section: 'Refleksi Guru', title: 'F. REFLEKSI GURU', evidence: 'Catatan' },
+  ]
+  const deepObservationGroups = [
+    { section: 'Implementasi Pembelajaran Mendalam', title: '1. Keselarasan', evidence: 'Bukti Pembelajaran', itemNumbers: [9, 10] },
+    { section: 'Kerangka Pembelajaran', title: '2. Kerangka Pembelajaran', evidence: 'Bukti Pembelajaran', itemNumbers: [11, 12, 13, 14] },
+    { section: 'Langkah Pembelajaran', title: '3. Langkah Pembelajaran', evidence: 'Catatan', itemNumbers: [15, 16, 17, 18, 19, 20] },
   ]
 
   return <div className="print-report" aria-hidden="true">
-    <PrintPreObservation fields={fields} responses={assessment.preObservation} />
-    <PrintObservation fields={fields} responses={assessment.observation} assessment={assessment} groups={observationGroups} />
+    <PrintPreObservation fields={fields} responses={assessment.preObservation} year={assessment.period} />
+    <PrintObservation fields={fields} responses={assessment.observation} assessment={assessment} groups={observationGroups} deepGroups={deepObservationGroups} year={assessment.period} />
     <PrintPostObservation fields={fields} assessment={assessment} />
+    <PrintFlow />
   </div>
 }
 
@@ -282,13 +285,14 @@ function PrintFields({ fields, includeSchool = false }: { fields: { teacher: str
   return <div className="print-fields">{rows.map(([label, value]) => <div className="print-field" key={label}><span>{label}</span><b>:</b><strong>{value || '\u00a0'}</strong></div>)}</div>
 }
 
-function PrintPreObservation({ fields, responses }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['preObservation'] }) {
+function PrintPreObservation({ fields, responses, year }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['preObservation']; year: string }) {
   return <section className="print-page print-pre-page">
     <PrintHeading title="Instrumen Telaah" subtitle="RPP/MODUL AJAR (Pra Observasi)" />
     <PrintFields fields={fields} includeSchool />
-    <PrintRubricTable className="print-pre-table" items={preObservationItems} responses={responses} firstHeader="Komponen RPP/MA" indicatorHeader="Indikator Yang Diamati" evidenceHeader="Catatan" />
+    <PrintRubricTable className="print-pre-table" items={preObservationItems} responses={responses} firstHeader="Komponen RPP/MA" indicatorHeader="Indikator Yang Diamati" evidenceHeader="Catatan" showTotal />
     <PrintAdditionalNotes />
-    <PrintSignature observer={fields.teacher ? 'Supervisor (Kepala sekolah & Pendamping Sekolah)' : 'Supervisor'} />
+    <PrintDate year={year} />
+    <PrintSignature observer="Supervisor" detail="( Kepala sekolah & Pendamping Sekolah)" />
   </section>
 }
 
@@ -296,19 +300,32 @@ function PrintHeading({ title, subtitle, italic }: { title: string; subtitle?: s
   return <div className="print-heading"><h1>{title}</h1>{subtitle && <h2>{subtitle}</h2>}{italic && <p>{italic}</p>}</div>
 }
 
-function PrintRubricTable({ className, items, responses, firstHeader, indicatorHeader, evidenceHeader }: { className: string; items: RubricItem[]; responses: Record<string, ScoredResponse>; firstHeader: string; indicatorHeader: string; evidenceHeader: string }) {
-  return <table className={`print-table print-rubric-table ${className}`}><colgroup><col className="print-col-no" /><col className="print-col-first" /><col className="print-col-indicator" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><thead><tr><th>No</th><th>{firstHeader}</th><th>{indicatorHeader}</th><th>Skor<br />(1–4)</th><th>{evidenceHeader}</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td className="print-center">{item.number}</td><td>{item.title}</td><td>{item.indicator}</td><td className="print-score">{responses[item.id]?.score ?? ''}</td><td>{responses[item.id]?.note || '\u00a0'}</td></tr>)}</tbody><tfoot><tr className="print-total-row"><td colSpan={3}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tfoot></table>
+function PrintRubricTable({ className, items, responses, firstHeader, indicatorHeader, evidenceHeader, showTotal = false }: { className: string; items: RubricItem[]; responses: Record<string, ScoredResponse>; firstHeader: string; indicatorHeader: string; evidenceHeader: string; showTotal?: boolean }) {
+  return <table className={`print-table print-rubric-table ${className}`}><colgroup><col className="print-col-no" /><col className="print-col-first" /><col className="print-col-indicator" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><thead><tr><th>No</th><th>{firstHeader}</th><th>{indicatorHeader}</th><th>Skor<br />(1–4)</th><th>{evidenceHeader}</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td className="print-center">{item.number}</td><td>{item.title}</td><td>{item.indicator}</td><td className="print-score">{responses[item.id]?.score ?? ''}</td><td>{responses[item.id]?.note || '\u00a0'}</td></tr>)}</tbody>{showTotal && <tfoot><tr className="print-total-row"><td colSpan={3}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tfoot>}</table>
 }
 
-function PrintObservation({ fields, responses, assessment, groups }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['observation']; assessment: Assessment; groups: Array<{ section: string; title: string; evidence: string }> }) {
+function PrintObservation({ fields, responses, assessment, groups, deepGroups, year }: { fields: Parameters<typeof PrintFields>[0]['fields']; responses: Assessment['observation']; assessment: Assessment; groups: Array<{ section: string; title: string; evidence: string }>; deepGroups: Array<{ section: string; title: string; evidence: string; itemNumbers: number[] }>; year: string }) {
+  const followUpText = assessment.followUps.map((item) => item.action.trim()).filter(Boolean).join(' | ')
   return <section className="print-page print-observation-page">
     <PrintHeading title="INSTRUMEN SUPERVISI PENGELOLAAN DAN PEMBELAJARAN DI KELAS" subtitle="(OBSERVASI)" italic="(Observasi & Umpan Balik Implementasi Pembelajaran Mendalam)" />
     <PrintFields fields={fields} />
-    {groups.map((group) => { const items = observationItems.filter((item) => item.section === group.section); if (items.length === 0) return null; return <div className="print-observation-group" key={group.section}><h3>{group.title}</h3><PrintRubricTable className="print-observation-table" items={items} responses={responses} firstHeader="Aspek yang Diamati" indicatorHeader="Indikator" evidenceHeader={group.evidence} /></div> })}
+    {groups.slice(0, 3).map((group) => { const items = observationItems.filter((item) => item.section === group.section); return <div className="print-observation-group" key={group.section}><h3>{group.title}</h3><PrintRubricTable className="print-observation-table" items={items} responses={responses} firstHeader="Aspek yang Diamati" indicatorHeader="Indikator" evidenceHeader={group.evidence} /></div> })}
+    <div className="print-observation-group print-deep-group"><h3>D. IMPLEMENTASI PEMBELAJARAN MENDALAM</h3>{deepGroups.map((group) => { const items = observationItems.filter((item) => group.itemNumbers.includes(item.number)); return <div className="print-deep-subgroup" key={group.title}><h4>{group.title}</h4><PrintCompactRubricTable items={items} responses={responses} evidenceHeader={group.evidence} /></div> })}</div>
+    {groups.slice(3).map((group) => { const items = observationItems.filter((item) => item.section === group.section); return <div className="print-observation-group" key={group.section}><h3>{group.title}</h3>{group.section === 'Refleksi Guru' ? <PrintCompactRubricTable items={items} responses={responses} evidenceHeader={group.evidence} firstHeader="Aspek Refleksi" /> : <PrintRubricTable className="print-observation-table" items={items} responses={responses} firstHeader="Aspek yang Diamati" indicatorHeader="Indikator" evidenceHeader={group.evidence} />}</div> })}
+    <PrintTotalTable items={observationItems} responses={responses} />
     <PrintScoringGuide />
-    <div className="print-summary-block"><h3>Catatan Supervisor</h3><div className="print-ruled-box">{assessment.supervisorNote || '\u00a0'}</div><h3>Rekomendasi / Saran Perbaikan</h3><div className="print-ruled-box">{assessment.recommendation || '\u00a0'}</div></div>
-    <PrintSignature observer="Supervisor" />
+    <div className="print-summary-block"><h3>Catatan Supervisor:</h3><div className="print-dotted-line">{assessment.supervisorNote || '\u00a0'}</div><h3>Rekomendasi/Saran Perbaikan:</h3><div className="print-dotted-line">{assessment.recommendation || '\u00a0'}</div><h3>Tindak Lanjut:</h3><div className="print-dotted-line">{followUpText || '\u00a0'}</div></div>
+    <PrintDate year={year} />
+    <PrintSignature observer="Supervisor" detail="(Kepala Sekolah & Pendamping Sekolah)" />
   </section>
+}
+
+function PrintTotalTable({ items, responses }: { items: RubricItem[]; responses: Record<string, ScoredResponse> }) {
+  return <table className="print-table print-total-table"><colgroup><col className="print-col-no" /><col className="print-col-first" /><col className="print-col-indicator" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><tbody><tr className="print-total-row"><td colSpan={3}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tbody></table>
+}
+
+function PrintCompactRubricTable({ items, responses, evidenceHeader, firstHeader = 'Aspek yang Diamati' }: { items: RubricItem[]; responses: Record<string, ScoredResponse>; evidenceHeader: string; firstHeader?: string }) {
+  return <table className="print-table print-compact-table"><colgroup><col className="print-col-no" /><col className="print-col-compact-aspect" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><thead><tr><th>No</th><th>{firstHeader}</th><th>Skor<br />(1-4)</th><th>{evidenceHeader}</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td className="print-center">{item.number}</td><td>{item.indicator}</td><td className="print-score">{responses[item.id]?.score ?? ''}</td><td>{responses[item.id]?.note || '\u00a0'}</td></tr>)}</tbody></table>
 }
 
 function PrintScoringGuide() {
@@ -325,18 +342,26 @@ function PrintPostObservation({ fields, assessment }: { fields: Parameters<typeo
     <table className="print-table print-feedback-table"><colgroup><col className="print-col-post-no" /><col className="print-col-feedback-aspect" /><col className="print-col-feedback" /><col className="print-col-feedback" /></colgroup><thead><tr><th>No</th><th>Aspek yang Diamati</th><th>Apresiasi (Kekuatan)</th><th>Area Pengembangan</th></tr></thead><tbody>{feedbackAspects.map((aspect, index) => <tr key={aspect}><td className="print-center">{index + 1}</td><td>{aspect}</td><td>{assessment.feedback[aspect]?.strength || '\u00a0'}</td><td>{assessment.feedback[aspect]?.development || '\u00a0'}</td></tr>)}</tbody></table>
     <h3 className="print-section-title">C. Rencana Tindak Lanjut</h3>
     <table className="print-table print-followup-table"><colgroup><col className="print-col-post-no" /><col className="print-col-followup-aspect" /><col className="print-col-action" /><col className="print-col-owner" /><col className="print-col-date" /></colgroup><thead><tr><th>No</th><th>Aspek</th><th>Tindak Lanjut yang Disepakati</th><th>Penanggung Jawab</th><th>Waktu Pelaksanaan</th></tr></thead><tbody>{assessment.followUps.map((item, index) => <tr key={item.aspect}><td className="print-center">{index + 1}</td><td>{item.aspect}</td><td>{item.action || '\u00a0'}</td><td>{item.owner || '\u00a0'}</td><td>{item.dueDate ? formatDate(item.dueDate) : '\u00a0'}</td></tr>)}</tbody></table>
-    <div className="print-post-notes"><h3>Catatan Supervisor</h3><div className="print-ruled-box">{assessment.supervisorNote || '\u00a0'}</div><h3>Kesepakatan Bersama</h3><div className="print-ruled-box">{assessment.recommendation || '\u00a0'}</div></div>
-    <div className="print-date-line">Pasirian, {assessment.observationDate ? formatDate(assessment.observationDate) : '\u00a0'}</div>
-    <div className="print-signatures"><PrintSignature observer="Supervisor" /><PrintSignature observer="Guru" /></div>
+    <div className="print-post-notes"><h3>Catatan Supervisor</h3><div className="print-dotted-line">{assessment.supervisorNote || '\u00a0'}</div><h3>Kesepakatan Bersama</h3><div className="print-dotted-line">{assessment.recommendation || '\u00a0'}</div></div>
+    <div className="print-date-line">........................, {assessment.period}</div>
+    <div className="print-signatures"><PrintSignature observer="Supervisor" detail="(Kepala Sekolah & Pendamping Sekolah)" /><PrintSignature observer="Guru" /></div>
   </section>
 }
 
 function PrintAdditionalNotes() {
-  return <div className="print-additional-notes"><h3>Catatan Tambahan</h3>{['Tuliskan kelebihan Perencanaan Pembelajaran:', 'Tuliskan hal-hal yang perlu diperbaiki dari Perencanaan Pembelajaran:', 'Tuliskan rekomendasi untuk perbaikan Perencanaan Pembelajaran:'].map((label) => <div className="print-note-block" key={label}><strong>{label}</strong><div className="print-ruled-box" /></div>)}</div>
+  return <div className="print-additional-notes"><h3>Catatan Tambahan</h3>{['Tuliskan kelebihan Perencanaan Pembelajaran:', 'Tuliskan hal yang perlu ditingkatkan dari Perencanaan Pembelajaran:', 'Tuliskan rekomendasi dan lanjutkan dengan revisi Perencanaan Pembelajaran sesuai prinsip PM:'].map((label, index) => <div className="print-note-block" key={label}><strong>{String.fromCharCode(97 + index)}) &nbsp;{label}</strong><div className="print-dotted-line" /></div>)}</div>
 }
 
-function PrintSignature({ observer }: { observer: string }) {
-  return <div className="print-signature"><strong>{observer}</strong><div className="signature-space" /><span>(................................................)</span></div>
+function PrintSignature({ observer, detail }: { observer: string; detail?: string }) {
+  return <div className="print-signature"><strong>{observer}</strong>{detail && <span>{detail}</span>}<div className="signature-space" /><span>(................................................)</span></div>
+}
+
+function PrintDate({ year }: { year: string }) {
+  return <div className="print-date-line">........................, {year}</div>
+}
+
+function PrintFlow() {
+  return <section className="print-page print-flow-page"><h2>Alur Pelaksanaan Observasi:</h2><ol><li>Instrumen Observasi → digunakan saat supervisi berlangsung.</li><li>Instrumen Pasca Observasi → digunakan setelah observasi, untuk refleksi guru dan umpan balik supervisor.</li><li>Tindak Lanjut → menjadi catatan bersama yang disepakati.</li></ol></section>
 }
 
 function Supervisors({ teachers, supervisors, onSupervisorsChange }: { teachers: Teacher[]; supervisors: Supervisor[]; onSupervisorsChange: (supervisors: Supervisor[]) => void }) {

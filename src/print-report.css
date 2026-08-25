@@ -239,6 +239,24 @@
     width: 49mm;
   }
 
+  .print-compact-table .print-col-compact-aspect {
+    width: auto;
+  }
+
+  .print-compact-table .print-col-evidence {
+    width: 49mm;
+  }
+
+  .print-deep-subgroup {
+    margin-top: 5mm;
+  }
+
+  .print-deep-subgroup h4 {
+    margin: 0 0 3mm;
+    font-size: 11pt;
+    font-weight: 700;
+  }
+
   .print-scoring-guide {
     display: flex;
     flex-wrap: wrap;
@@ -258,6 +276,13 @@
     white-space: pre-wrap;
     border: 1px solid #202020;
     padding: 2.5mm;
+  }
+
+  .print-dotted-line {
+    min-height: 8mm;
+    padding: 1mm 0;
+    border-bottom: 1px dotted #111;
+    white-space: pre-wrap;
   }
 
   .print-note-block {
@@ -305,6 +330,22 @@
   .print-signatures .print-signature {
     flex: 1;
     margin-top: 0;
+  }
+
+  .print-flow-page {
+    padding-top: 18mm;
+  }
+
+  .print-flow-page h2 {
+    margin: 0 0 8mm;
+    font-size: 12pt;
+  }
+
+  .print-flow-page ol {
+    margin: 0;
+    padding-left: 7mm;
+    font-size: 10.5pt;
+    line-height: 1.55;
   }
 
   .print-reflection-table .print-col-post-no,
