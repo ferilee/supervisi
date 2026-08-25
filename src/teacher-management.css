@@ -1,3 +1,10 @@
+.observation-info-required { display: flex; align-items: center; gap: 13px; margin: 22px 0; padding: 17px 18px; border: 1px solid #d8d5ff; border-radius: 14px; background: #f4f3ff; }
+.required-info-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; background: #e2e0ff; color: #5d50e8; }
+.required-info-copy { flex: 1; min-width: 0; }
+.required-info-copy strong, .required-info-copy span { display: block; }
+.required-info-copy strong { color: #37315f; font-size: 12px; }
+.required-info-copy span { margin-top: 4px; color: #77749a; font-size: 11px; line-height: 1.5; }
+
 .teacher-panel-head { align-items: center; }
 .teacher-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .upload-button { cursor: pointer; }
@@ -20,6 +27,9 @@
 .teacher-modal-footer { display: flex; justify-content: flex-end; gap: 9px; padding: 20px 24px 22px; }
 
 @media (max-width: 650px) {
+  .observation-info-required { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
+  .required-info-copy { flex-basis: calc(100% - 48px); }
+  .observation-info-required .primary-button { width: 100%; justify-content: center; margin-left: 47px; }
   .teacher-panel-head { align-items: flex-start; flex-direction: column; }
   .teacher-actions { width: 100%; justify-content: flex-start; }
   .teacher-actions .secondary-button { flex: 1; justify-content: center; }

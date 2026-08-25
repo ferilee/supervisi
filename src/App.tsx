@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
-  ArrowLeft, ArrowRight, BarChart3, Bell, BookOpenCheck, Check, ChevronDown, ClipboardCheck,
+  ArrowLeft, ArrowRight, BarChart3, Bell, BookOpenCheck, Check, ChevronDown, CircleAlert, ClipboardCheck,
   Download, FileDown, FileText, LayoutDashboard, Maximize2, Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck,
   Sparkles, Upload, Users, X,
 } from 'lucide-react'
@@ -118,6 +118,17 @@ function isStageUnlocked(index: number, assessment: Assessment) {
   return index === 0 || (index === 1 && preComplete) || (index === 2 && preComplete && observationComplete)
 }
 
+function getMissingObservationInfo(assessment: Assessment) {
+  const missing: string[] = []
+  if (!assessment.teacherId) missing.push('nama guru')
+  if (!assessment.className.trim()) missing.push('kelas')
+  if (!assessment.subject.trim()) missing.push('mata pelajaran')
+  if (!assessment.topic.trim()) missing.push('materi pokok')
+  if (!assessment.observationDate) missing.push('tanggal observasi')
+  if (!assessment.observer.trim()) missing.push('supervisor')
+  return missing
+}
+
 function AssessmentWorkspace({ assessment: initial, teachers, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
   const [assessment, setAssessment] = useState(initial)
   const [stage, setStage] = useState<Stage>(initial.currentStage)
@@ -128,20 +139,27 @@ function AssessmentWorkspace({ assessment: initial, teachers, onBack, onSave }: 
   const updateResponse = (bucket: 'preObservation' | 'observation', id: string, patch: Partial<ScoredResponse>) => setAssessment((current) => { const existing = current[bucket][id] ?? { note: '' }; return { ...current, [bucket]: { ...current[bucket], [id]: { ...existing, ...patch } } } })
   const preComplete = completedCount(preObservationItems, assessment.preObservation) === preObservationItems.length
   const observationComplete = completedCount(observationItems, assessment.observation) === observationItems.length
+  const missingObservationInfo = getMissingObservationInfo(assessment)
+  const observationInfoComplete = missingObservationInfo.length === 0
   const save = (message = 'Perubahan tersimpan') => onSave(assessment, message)
   const moveTo = (nextStage: Stage, message = 'Tahap penilaian diperbarui') => { const next = { ...assessment, currentStage: nextStage }; setAssessment(next); setStage(nextStage); onSave(next, message) }
-  const goNext = () => { if (stageIndex === 0) { if (!preComplete) { window.alert('Lengkapi seluruh skor pra-observasi sebelum melanjutkan ke observasi.'); return } moveTo('observasi', 'Tahap observasi dibuka') } else if (stageIndex === 1) { if (!observationComplete) { window.alert('Lengkapi seluruh skor observasi sebelum melanjutkan ke pasca-observasi.'); return } moveTo('pasca-observasi', 'Tahap pasca-observasi dibuka') } else { const finished = { ...assessment, status: 'selesai' as const, currentStage: 'pasca-observasi' as const }; onSave(finished, 'Penilaian ditandai selesai') } }
+  const goNext = () => { if (!observationInfoComplete) { setShowMeta(true); return } if (stageIndex === 0) { if (!preComplete) { window.alert('Lengkapi seluruh skor pra-observasi sebelum melanjutkan ke observasi.'); return } moveTo('observasi', 'Tahap observasi dibuka') } else if (stageIndex === 1) { if (!observationComplete) { window.alert('Lengkapi seluruh skor observasi sebelum melanjutkan ke pasca-observasi.'); return } moveTo('pasca-observasi', 'Tahap pasca-observasi dibuka') } else { const finished = { ...assessment, status: 'selesai' as const, currentStage: 'pasca-observasi' as const }; onSave(finished, 'Penilaian ditandai selesai') } }
   return <div className="page-wrap workspace-page">
     <div className="workspace-top"><button className="back-button" onClick={onBack}><ArrowLeft size={17} /> Kembali ke ringkasan</button><div className="workspace-actions"><span className={`status-badge ${assessment.status}`}>{assessment.status === 'selesai' ? <Check size={14} /> : <span className="status-dot" />}{assessment.status === 'selesai' ? 'Selesai' : 'Draf'}</span><button className="secondary-button compact" onClick={() => save()}><Check size={16} /> Simpan draf</button></div></div>
     <div className="workspace-heading"><div><p className="eyebrow">Penilaian kinerja guru · {assessment.period}</p><h1>{teacher?.name ?? 'Penilaian baru'}</h1><p className="muted">Lengkapi instrumen secara bertahap. Perubahan tersimpan sebagai draf.</p></div><button className="icon-button outlined" aria-label="Unduh laporan" onClick={() => window.print()}><FileDown size={18} /></button></div>
     {showMeta && <MetaForm assessment={assessment} teachers={teachers} onChange={update} onClose={() => { save('Identitas observasi tersimpan'); setShowMeta(false) }} />}
     {!showMeta && <button className={`meta-summary ${teacher ? '' : 'is-empty'}`} onClick={() => setShowMeta(true)} aria-expanded={false} aria-controls="observation-info-panel"><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div><strong>{teacher?.name ?? 'Lengkapi informasi observasi'}</strong><span>{teacher ? `${assessment.className || 'Kelas belum diisi'} · ${assessment.subject || teacher.subject} · Observasi ${formatDate(assessment.observationDate)}` : 'Tambahkan guru, kelas, mata pelajaran, dan tanggal observasi'}</span></div><ChevronDown size={18} /></button>}
-    <div className="stepper">{steps.map((item, index) => { const unlocked = isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
-    {stage === 'pra-observasi' && <FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} />}
-    {stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
-    {stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
-    <div className="workspace-footer"><button className="secondary-button" onClick={() => { if (stageIndex > 0) moveTo(steps[stageIndex - 1].id) }} disabled={stageIndex === 0}><ArrowLeft size={16} /> Sebelumnya</button><div className="footer-progress"><span>{stageIndex + 1} dari {steps.length}</span><div className="progress-line"><i style={{ width: `${((stageIndex + 1) / steps.length) * 100}%` }} /></div></div><button className="primary-button" onClick={goNext}>{stageIndex === steps.length - 1 ? 'Selesaikan penilaian' : 'Lanjutkan'} <ArrowRight size={16} /></button></div>
+    <div className="stepper">{steps.map((item, index) => { const unlocked = observationInfoComplete && isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id && observationInfoComplete ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{!observationInfoComplete ? 'Lengkapi informasi observasi' : unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
+    {!observationInfoComplete && <ObservationInfoRequired missing={missingObservationInfo} onOpen={() => setShowMeta(true)} />}
+    {observationInfoComplete && stage === 'pra-observasi' && <FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} />}
+    {observationInfoComplete && stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
+    {observationInfoComplete && stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
+    <div className="workspace-footer"><button className="secondary-button" onClick={() => { if (stageIndex > 0) moveTo(steps[stageIndex - 1].id) }} disabled={stageIndex === 0}><ArrowLeft size={16} /> Sebelumnya</button><div className="footer-progress"><span>{stageIndex + 1} dari {steps.length}</span><div className="progress-line"><i style={{ width: `${((stageIndex + 1) / steps.length) * 100}%` }} /></div></div><button className="primary-button" onClick={goNext}>{!observationInfoComplete ? 'Lengkapi informasi' : stageIndex === steps.length - 1 ? 'Selesaikan penilaian' : 'Lanjutkan'} <ArrowRight size={16} /></button></div>
   </div>
+}
+
+function ObservationInfoRequired({ missing, onOpen }: { missing: string[]; onOpen: () => void }) {
+  return <div className="observation-info-required"><div className="required-info-icon"><CircleAlert size={20} /></div><div className="required-info-copy"><strong>Lengkapi informasi observasi terlebih dahulu</strong><span>Butir penilaian akan aktif setelah data berikut diisi: {missing.join(', ')}.</span></div><button className="primary-button compact" onClick={onOpen}>Isi informasi</button></div>
 }
 
 function MetaForm({ assessment, teachers, onChange, onClose }: { assessment: Assessment; teachers: Teacher[]; onChange: (patch: Partial<Assessment>) => void; onClose: () => void }) {
