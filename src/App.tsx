@@ -5,7 +5,7 @@ import {
   Sparkles, Trash2, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { feedbackAspects, followUpAspects, observationItems, preObservationItems, reflectionQuestions, scoreLabels } from './data/instrument'
-import { bootstrapLocalAccounts, changePassword, getStoredSession, isBackendConfigured, signIn, signOut, supabase } from './lib/auth'
+import { bootstrapLocalAccounts, changePassword, getCurrentSession, getStoredSession, isBackendConfigured, signIn, signOut } from './lib/auth'
 import { averageScore, completedCount, totalScore } from './lib/scoring'
 import { defaultSettings, defaultSupervisors, getAssessments, getLocalDataSnapshot, getSettings, getSupervisors, getTeachers, hasCompletedLocalMigration, hasLocalData, makeId, markLocalMigrationCompleted } from './lib/storage'
 import { createDataRepository, type MigrationResult } from './lib/data-repository'
@@ -27,13 +27,14 @@ const freshAssessment = (teacherId = '', observer = defaultSupervisors[0]?.name 
 function App() {
   const [page, setPage] = useState<AppPage>('dashboard')
   const [isBooting, setIsBooting] = useState(true)
+  const [authReady, setAuthReady] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const [teachers, setTeachers] = useState<Teacher[]>(() => getTeachers())
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => getSupervisors())
   const [settings, setSettings] = useState<AppSettings>(() => getSettings())
   const [assessments, setAssessments] = useState<Assessment[]>(() => getAssessments())
   const [session, setSession] = useState<AuthSession | null>(() => getStoredSession())
-  const [dataReady, setDataReady] = useState(() => !isBackendConfigured || !getStoredSession())
+  const [dataReady, setDataReady] = useState(false)
   const [dataError, setDataError] = useState('')
   const [showMigration, setShowMigration] = useState(false)
   const [migrationBusy, setMigrationBusy] = useState(false)
@@ -42,7 +43,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState('')
   const [showPasswordChange, setShowPasswordChange] = useState(false)
-  const repository = useRef(createDataRepository(supabase)).current
+  const repository = useRef(createDataRepository(!isBackendConfigured)).current
 
   const persistAssessment = async (next: Assessment, message = 'Perubahan tersimpan') => {
     try {
@@ -72,7 +73,7 @@ function App() {
   }
 
   const loadRemoteData = async (nextSession: AuthSession) => {
-    if (nextSession.backend !== 'supabase') { setDataReady(true); return }
+    if (nextSession.backend !== 'sqlite') { setDataReady(true); return }
     setDataReady(false)
     setDataError('')
     try {
@@ -84,13 +85,13 @@ function App() {
       setDataReady(true)
       if (nextSession.role === 'admin' && hasLocalData() && !hasCompletedLocalMigration()) setShowMigration(true)
     } catch (reason) {
-      setDataError(reason instanceof Error ? reason.message : 'Data Supabase gagal dimuat.')
+      setDataError(reason instanceof Error ? reason.message : 'Data SQLite gagal dimuat.')
       setDataReady(true)
     }
   }
 
   const migrateLocalData = async () => {
-    if (!session || session.backend !== 'supabase') return
+    if (!session || session.backend !== 'sqlite') return
     setMigrationBusy(true)
     try {
       const result = await repository.migrate(getLocalDataSnapshot())
@@ -104,6 +105,7 @@ function App() {
     } finally { setMigrationBusy(false) }
   }
 
+  useEffect(() => { void getCurrentSession().then((nextSession) => { setSession(nextSession); setAuthReady(true) }) }, [])
   useEffect(() => { bootstrapLocalAccounts(supervisors) }, [supervisors])
   useEffect(() => { if (session) void loadRemoteData(session) }, [session?.userId])
 
@@ -147,7 +149,7 @@ function App() {
     await persistSettings(nextSettings)
   }
 
-  if (isBooting) return <LoadingScreen schoolName={settings.schoolName} />
+  if (isBooting || !authReady) return <LoadingScreen schoolName={settings.schoolName} />
   if (!session) return <LoginScreen teachers={teachers} backendConfigured={isBackendConfigured} onSubmit={handleSignIn} />
   if (!dataReady) return <DataLoadingScreen schoolName={settings.schoolName} />
   if (dataError) return <DataErrorScreen message={dataError} onRetry={() => void loadRemoteData(session)} onSignOut={handleSignOut} />
@@ -208,7 +210,7 @@ function LoadingScreen({ schoolName }: { schoolName: string }) {
 }
 
 function DataLoadingScreen({ schoolName }: { schoolName: string }) {
-  return <div className="startup-screen loading-screen"><div className="startup-brand"><div className="startup-mark"><ShieldCheck size={26} /></div><strong>supervisi</strong><span>{schoolName}</span></div><div className="loading-indicator" aria-label="Memuat data"><i /></div><p>Mengambil data dari Supabase...</p></div>
+  return <div className="startup-screen loading-screen"><div className="startup-brand"><div className="startup-mark"><ShieldCheck size={26} /></div><strong>supervisi</strong><span>{schoolName}</span></div><div className="loading-indicator" aria-label="Memuat data"><i /></div><p>Mengambil data dari server...</p></div>
 }
 
 function DataErrorScreen({ message, onRetry, onSignOut }: { message: string; onRetry: () => void; onSignOut: () => Promise<void> }) {
@@ -217,7 +219,7 @@ function DataErrorScreen({ message, onRetry, onSignOut }: { message: string; onR
 
 function DataMigrationDialog({ busy, onMigrate, onClose }: { busy: boolean; onMigrate: () => Promise<void>; onClose: () => void }) {
   const local = getLocalDataSnapshot()
-  return <div className="teacher-modal-backdrop" role="presentation"><div className="teacher-modal" role="dialog" aria-modal="true" aria-labelledby="migration-title"><div className="teacher-modal-head"><div><span className="eyebrow">Sinkronisasi data</span><h2 id="migration-title">Pindahkan data browser lama?</h2><p className="muted">Data lokal ditemukan di browser ini. Pindahkan ke Supabase agar dapat dibuka dari browser atau perangkat lain.</p></div><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Tutup"><X size={18} /></button></div><div className="migration-summary"><span><strong>{local.teachers.length}</strong> guru</span><span><strong>{local.supervisors.length}</strong> supervisor</span><span><strong>{local.assessments.length}</strong> penilaian</span></div><p className="muted">Data server yang sudah ada akan dipertahankan. Data lokal hanya ditambahkan jika belum ditemukan, tanpa menghapus cadangan lokal.</p><div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose} disabled={busy}>Nanti</button><button type="button" className="primary-button compact" onClick={() => void onMigrate()} disabled={busy}>{busy ? 'Memindahkan...' : 'Migrasikan ke Supabase'}</button></div></div></div>
+  return <div className="teacher-modal-backdrop" role="presentation"><div className="teacher-modal" role="dialog" aria-modal="true" aria-labelledby="migration-title"><div className="teacher-modal-head"><div><span className="eyebrow">Sinkronisasi data</span><h2 id="migration-title">Pindahkan data browser lama?</h2><p className="muted">Data lokal ditemukan di browser ini. Pindahkan ke SQLite agar dapat dibuka dari browser atau perangkat lain.</p></div><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="Tutup"><X size={18} /></button></div><div className="migration-summary"><span><strong>{local.teachers.length}</strong> guru</span><span><strong>{local.supervisors.length}</strong> supervisor</span><span><strong>{local.assessments.length}</strong> penilaian</span></div><p className="muted">Data server yang sudah ada akan dipertahankan. Data lokal hanya ditambahkan jika belum ditemukan, tanpa menghapus cadangan lokal.</p><div className="teacher-modal-footer"><button type="button" className="secondary-button compact" onClick={onClose} disabled={busy}>Nanti</button><button type="button" className="primary-button compact" onClick={() => void onMigrate()} disabled={busy}>{busy ? 'Memindahkan...' : 'Migrasikan ke SQLite'}</button></div></div></div>
 }
 
 function MigrationResultNotice({ result, onClose }: { result: MigrationResult; onClose: () => void }) {

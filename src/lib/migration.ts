@@ -1,4 +1,4 @@
-import type { AppSettings, Assessment, Supervisor, Teacher } from '../types'
+import type { AppSettings, Assessment, Supervisor, Teacher } from '../types.js'
 
 export interface PersistedData {
   teachers: Teacher[]

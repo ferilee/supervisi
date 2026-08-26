@@ -1,30 +1,76 @@
 # Supervisi — SMKN Pasirian
 
-MVP aplikasi interaktif untuk instrumen supervisi pembelajaran:
+Aplikasi pengelolaan supervisi pembelajaran dengan tiga tahap: pra-observasi, observasi, serta pasca-observasi. Data produksi disimpan di SQLite melalui backend Node.js; frontend tidak lagi bergantung pada Supabase atau `localStorage` untuk data operasional.
 
-- Telaah RPP / Modul Ajar pra-observasi
-- Observasi pembelajaran
-- Refleksi, umpan balik, dan tindak lanjut pasca-observasi
-- Rekap guru dan cetak laporan melalui **Cetak / Simpan sebagai PDF** di browser
-
-## Menjalankan
+## Pengembangan lokal
 
 ```bash
 npm install
 npm run dev
 ```
 
-Tanpa environment backend, aplikasi berjalan dalam mode lokal dengan `localStorage`. Salin [`.env.example`](./.env.example) menjadi `.env.local`, isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`, lalu login akan memakai Supabase Auth dan seluruh data operasional akan dimuat dari Supabase. Jalankan [`supabase/schema.sql`](./supabase/schema.sql) di SQL Editor Supabase untuk membuat tabel serta policy RLS berbasis peran.
+Untuk menjalankan API dan frontend produksi secara lokal:
 
-Ketika Supabase aktif, backend menjadi sumber data utama dan aplikasi tidak menggunakan `localStorage` sebagai fallback jika koneksi gagal. Jika browser lama memiliki data lokal, Admin akan mendapat dialog migrasi satu kali untuk menggabungkan guru, supervisor, penilaian, dan pengaturan ke Supabase tanpa duplikasi. Data server dipertahankan jika terjadi konflik dan data lokal tetap tersimpan sebagai cadangan.
+```bash
+npm run build
+DATABASE_PATH=./data/supervisi.sqlite npm start
+```
 
-Role yang didukung: Admin memiliki akses penuh; Supervisor dapat mengelola penilaian dan laporan tetapi tidak melihat halaman Supervisor/Pengaturan; Guru hanya melihat data penilaiannya sendiri dalam mode baca saja. Password tidak disimpan di Postgres—penggantian password memakai Supabase Auth.
+Mode browser-only lama dapat digunakan untuk prototipe dengan `VITE_USE_LOCAL_DATA=true` pada `.env.local`. Mode default mengharapkan API SQLite berjalan pada origin yang sama.
 
-Untuk aktivasi produksi, buat user di Supabase Auth lalu tambahkan baris pasangannya di `profiles`. Admin memakai username `Ferilee`; akun supervisor memakai nama depan sebagai username dan `must_change_password = true`. Pembuatan akun Auth supervisor/guru sebaiknya dilakukan melalui Edge Function dengan service role key, bukan dari browser.
+## Akun dan hak akses
 
-## Docker dan GHCR
+- Admin: username dan password awal diambil dari `ADMIN_USERNAME` serta `ADMIN_PASSWORD`; default pengembangan adalah `Ferilee` / `F3r!-lee`.
+- Supervisor: akun dibuat otomatis saat supervisor ditambahkan. Username memakai nama depan, dengan angka tambahan jika duplikat. Password awal `supervisorsmakenpas` dan wajib diganti.
+- Guru: akun dibuat otomatis saat guru ditambahkan. Username memakai nama depan, dengan angka tambahan jika duplikat. Password awal `gurusmakenpas` dan wajib diganti. Guru hanya dapat membaca data miliknya sendiri.
 
-Workflow [`publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml) dijalankan manual dari GitHub Actions dan menerbitkan `ghcr.io/ferilee/supervisi:latest`. Tambahkan GitHub Actions Variables `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` sebelum menjalankan workflow. Compose production tersedia di [`compose.yaml`](./compose.yaml) dan menggunakan network eksternal `ferileenet` serta port host `2005`. Karena aplikasi ini frontend Vite yang dilayani Nginx, konfigurasi `VITE_*` masuk saat image dibuild; environment Compose tidak mengganti konfigurasi yang sudah berada di bundle.
+Otorisasi ditegakkan di server, bukan hanya dengan menyembunyikan menu. Sesi memakai cookie HTTP-only dan password disimpan sebagai hash.
+
+## Docker, GHCR, dan Arcane
+
+Workflow [`publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml) dijalankan manual dari GitHub Actions dan menerbitkan `ghcr.io/ferilee/supervisi:latest`. Workflow tidak lagi membutuhkan GitHub Actions Variables Supabase.
+
+Salin `.env.example` menjadi `.env` di server, lalu ubah password admin:
+
+```env
+ADMIN_USERNAME=Ferilee
+ADMIN_PASSWORD=password-admin-yang-kuat
+```
+
+Compose menggunakan SQLite persisten:
+
+```yaml
+volumes:
+  - /srv/data/supervisi/sqlite:/app/data
+```
+
+Di Arcane, gunakan [`compose.yaml`](./compose.yaml), network eksternal `ferileenet`, dan port `2005:2005`. Pada Nginx Proxy Manager, arahkan domain ke hostname container `supervisi` pada port `2005`. Setelah workflow selesai, pull image dan recreate container.
+
+Pastikan direktori host tersedia dan dapat ditulis oleh Docker:
+
+```bash
+sudo mkdir -p /srv/data/supervisi/sqlite /srv/backups/supervisi/sqlite
+```
+
+## Migrasi data dari browser lama
+
+1. Deploy image SQLite dengan volume baru.
+2. Buka aplikasi memakai browser yang menyimpan 74 guru/data lama dan masuk sebagai Admin.
+3. Dialog **Pindahkan data browser lama?** akan mengirim guru, supervisor, penilaian, dan pengaturan ke SQLite.
+4. Data server dipertahankan jika konflik; data lokal tetap ada sebagai cadangan.
+5. Setelah selesai, buka browser lain dan masuk dengan akun backend.
+
+Migrasi idempoten dan memakai `legacy_id`, sehingga dialog aman dijalankan ulang. Jika browser lama tidak lagi tersedia, data dapat diimpor ulang melalui CSV dari halaman Daftar guru.
+
+## Backup SQLite
+
+Jalankan di host Docker:
+
+```bash
+./scripts/backup/supervisi-sqlite.sh
+```
+
+Script memakai SQLite online backup melalui container dan menyimpan hasil default ke `/srv/backups/supervisi/sqlite`. Uji pemulihan backup secara berkala, jangan hanya mengandalkan file WAL di volume aktif.
 
 ## Validasi
 
@@ -33,4 +79,4 @@ npm test
 npm run build
 ```
 
-Versi ini sengaja tidak menghitung Predikat Kinerja resmi. Skor instrumen ditampilkan sebagai skor total dan rata-rata, sedangkan penetapan predikat tetap dilakukan sesuai platform dan ketentuan resmi PKG.
+Versi ini belum menghitung atau menetapkan Predikat Kinerja resmi. Skor instrumen tetap menjadi bahan penilaian, sedangkan predikat ditetapkan sesuai platform dan ketentuan resmi PKG.

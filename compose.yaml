@@ -3,12 +3,20 @@ services:
     image: ghcr.io/ferilee/supervisi:latest
     container_name: supervisi
     ports:
-      - "2005:80"
+      - "2005:2005"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 2005
+      DATABASE_PATH: /app/data/supervisi.sqlite
+    volumes:
+      - /srv/data/supervisi/sqlite:/app/data
     networks:
       - ferileenet
     restart: always
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:2005/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

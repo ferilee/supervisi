@@ -10,7 +10,7 @@ export interface AuthSession {
   role: UserRole
   teacherId?: string
   mustChangePassword: boolean
-  backend: 'local' | 'supabase'
+  backend: 'local' | 'sqlite'
 }
 
 export interface Teacher {
