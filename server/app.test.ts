@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { randomUUID } from 'node:crypto'
+import { rmSync } from 'node:fs'
 import request from 'supertest'
 import { createApp } from './app.js'
 import { closeDatabase, createDatabase } from './db.js'
+import { hashPassword } from './auth.js'
 
 const databases: ReturnType<typeof createDatabase>[] = []
 
@@ -53,4 +56,27 @@ describe('SQLite backend', () => {
     await app.post('/api/assessments').set('Cookie', guruCookie).send({ teacherId: teacher.body.id }).expect(403)
     await app.post('/api/auth/change-password').set('Cookie', guruCookie).send({ currentPassword: 'gurusmakenpas', nextPassword: 'password-baru-123' }).expect(200)
   }, 20000)
+
+  it('membersihkan tanda baca pada username supervisor dan memakai suffix yang benar', async () => {
+    const app = testApp()
+    const admin = await app.post('/api/auth/login').send({ username: 'Ferilee', password: 'F3r!-lee', role: 'admin' }).expect(200)
+    const cookie = admin.headers['set-cookie']
+    await app.post('/api/teachers').set('Cookie', cookie).send({ name: 'Winarsih, S.Pd', subject: 'Matematika', active: true }).expect(201)
+    await app.post('/api/supervisors').set('Cookie', cookie).send({ name: 'Winarsih, S.Pd', position: 'Supervisor', active: true }).expect(201)
+    const users = await app.post('/api/auth/login').send({ username: 'Winarsih2', password: 'supervisorsmakenpas', role: 'supervisor' }).expect(200)
+    expect(users.body.username).toBe('Winarsih2')
+  })
+
+  it('memperbaiki username lama Winarsih,2 saat database dibuka kembali', () => {
+    const filename = `/tmp/supervisi-username-${randomUUID()}.sqlite`
+    const first = createDatabase(filename)
+    first.prepare(`INSERT INTO users (id, username, display_name, role, password_hash, active, must_change_password, created_at)
+      VALUES (?, ?, ?, 'supervisor', ?, 1, 1, ?)`).run(randomUUID(), 'Winarsih,2', 'Winarsih, S.Pd', hashPassword('supervisorsmakenpas'), new Date().toISOString())
+    closeDatabase(first)
+
+    const second = createDatabase(filename)
+    expect((second.prepare("SELECT username FROM users WHERE role = 'supervisor'").all() as Array<{ username: string }>).map((row) => row.username)).toContain('Winarsih2')
+    closeDatabase(second)
+    rmSync(filename, { force: true }); rmSync(`${filename}-shm`, { force: true }); rmSync(`${filename}-wal`, { force: true })
+  })
 })

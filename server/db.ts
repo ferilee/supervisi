@@ -22,6 +22,23 @@ export const defaultSettings = {
   signatureImage: '',
 }
 
+export function usernameBase(name: string) {
+  return (name.trim().split(/\s+/)[0] ?? '').normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+function repairLegacyUsernames(db: DatabaseHandle) {
+  const rows = db.prepare("SELECT id, username, display_name FROM users WHERE role IN ('guru', 'supervisor')").all() as Array<{ id: string; username: string; display_name: string }>
+  const update = db.prepare('UPDATE users SET username = ? WHERE id = ?')
+  for (const row of rows) {
+    const suffix = row.username.match(/,(\d+)$/)?.[1]
+    if (!suffix) continue
+    const base = usernameBase(row.display_name)
+    const replacement = `${base}${suffix}`
+    if (!base || replacement === row.username || db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(replacement)) continue
+    update.run(replacement, row.id)
+  }
+}
+
 export function createDatabase(filename: string): DatabaseHandle {
   if (filename !== ':memory:') mkdirSync(path.dirname(path.resolve(filename)), { recursive: true })
   const db = new Database(filename)
@@ -117,6 +134,8 @@ export function createDatabase(filename: string): DatabaseHandle {
       supervisorSetupComplete: defaultSettings.supervisorSetupComplete ? 1 : 0,
     })
   }
+
+  repairLegacyUsernames(db)
 
   const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as { id: string } | undefined
   if (!admin) {

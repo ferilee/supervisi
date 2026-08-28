@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
 import cookieParser from 'cookie-parser'
-import { defaultSettings, DEFAULT_SUPERVISOR_PASSWORD, DEFAULT_TEACHER_PASSWORD, type DatabaseHandle } from './db.js'
+import { defaultSettings, DEFAULT_SUPERVISOR_PASSWORD, DEFAULT_TEACHER_PASSWORD, type DatabaseHandle, usernameBase } from './db.js'
 import { destroySession, hashPassword, issueSession, mapUser, purgeExpiredSessions, sessionPayload, userFromRequest, verifyPassword, type AuthUser } from './auth.js'
 import type { PersistedData } from '../src/lib/migration.js'
 import type { Assessment, AppSettings, Supervisor, Teacher } from '../src/types.js'
@@ -18,7 +18,6 @@ function json<T>(value: unknown, fallback: T): T { try { return typeof value ===
 function roleIs(...roles: AuthUser['role'][]) { return (request: Request, response: Response, next: NextFunction) => { if (!request.user || !roles.includes(request.user.role)) return response.status(403).json({ error: 'Akses tidak diizinkan.' }); next() } }
 function error(response: Response, message: string, status = 400) { return response.status(status).json({ error: message }) }
 function initials(name: string) { return name.trim().split(/\s+/).map((part) => part[0] ?? '').join('').slice(0, 2).toUpperCase() }
-function usernameBase(name: string) { return name.trim().split(/\s+/)[0] ?? '' }
 function uniqueUsername(db: DatabaseHandle, name: string, role: 'guru' | 'supervisor') {
   const base = usernameBase(name) || role
   let candidate = base
