@@ -1,4 +1,4 @@
-import type { RubricItem } from '../types'
+import type { RubricItem } from '../types.js'
 
 const preObservationData: Array<[string, string]> = [
   ['Identitas RPP/MA', 'Lengkap: mata pelajaran, Jenjang, kelas, Materi Pokok, alokasi waktu dll'],

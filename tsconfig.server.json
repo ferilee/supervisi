@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server/**/*.ts", "src/types.ts", "src/lib/migration.ts"]
+  "include": ["server/**/*.ts", "src/types.ts", "src/lib/migration.ts", "src/data/instrument.ts"]
 }

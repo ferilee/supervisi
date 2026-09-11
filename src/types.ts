@@ -56,6 +56,34 @@ export interface ScoredResponse {
   note: string
 }
 
+export type RppReviewStatus = 'terpenuhi' | 'sebagian' | 'belum-ditemukan'
+export type RppReviewConfidence = 'tinggi' | 'sedang' | 'rendah'
+
+export interface RppReviewItem {
+  itemId: string
+  status: RppReviewStatus
+  suggestedScore?: Score
+  evidence: string
+  pageNumber?: number
+  rationale: string
+  confidence: RppReviewConfidence
+}
+
+export interface RppReview {
+  id: string
+  analyzedAt: string
+  provider: string
+  model: string
+  summary: string
+  items: RppReviewItem[]
+}
+
+export interface RppDocument {
+  name: string
+  size: number
+  uploadedAt: string
+}
+
 export interface FollowUp {
   aspect: string
   action: string
@@ -84,6 +112,8 @@ export interface Assessment {
   recommendation: string
   createdAt: string
   updatedAt: string
+  rppDocument?: RppDocument
+  rppReview?: RppReview
 }
 
 export type AppPage = 'dashboard' | 'assessment' | 'teachers' | 'supervisors' | 'settings' | 'reports'

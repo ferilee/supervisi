@@ -13,6 +13,7 @@ import './post-tabs.css'
 import './settings.css'
 import './startup.css'
 import './notification.css'
+import './rpp-review.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

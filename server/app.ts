@@ -1,10 +1,14 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
 import cookieParser from 'cookie-parser'
+import multer from 'multer'
+import { mkdir, writeFile, readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { defaultSettings, DEFAULT_SUPERVISOR_PASSWORD, DEFAULT_TEACHER_PASSWORD, type DatabaseHandle, usernameBase } from './db.js'
 import { destroySession, hashPassword, issueSession, mapUser, purgeExpiredSessions, sessionPayload, userFromRequest, verifyPassword, type AuthUser } from './auth.js'
 import type { PersistedData } from '../src/lib/migration.js'
 import type { Assessment, AppSettings, Supervisor, Teacher } from '../src/types.js'
 import { newId } from './auth.js'
+import { analyzeRpp, extractRppText, OpenAICompatibleRppAnalyzer } from './rpp-review.js'
 
 declare global {
   namespace Express { interface Request { user?: AuthUser } }
@@ -28,7 +32,7 @@ function uniqueUsername(db: DatabaseHandle, name: string, role: 'guru' | 'superv
 
 function teacherFromRow(row: Json): Teacher { return { id: String(row.id), legacyId: typeof row.legacy_id === 'string' ? row.legacy_id : undefined, name: String(row.name), subject: String(row.subject ?? ''), initials: String(row.initials ?? ''), color: String(row.color ?? ''), active: bool(row.active) } }
 function supervisorFromRow(row: Json): Supervisor { return { id: String(row.id), legacyId: typeof row.legacy_id === 'string' ? row.legacy_id : undefined, teacherId: typeof row.teacher_id === 'string' ? row.teacher_id : undefined, name: String(row.name), position: String(row.position ?? ''), active: bool(row.active) } }
-function assessmentFromRow(row: Json): Assessment { return { id: String(row.id), legacyId: typeof row.legacy_id === 'string' ? row.legacy_id : undefined, teacherId: String(row.teacher_id ?? ''), period: String(row.period ?? ''), className: String(row.class_name ?? ''), subject: String(row.subject ?? ''), topic: String(row.topic ?? ''), observer: String(row.observer ?? ''), observationDate: String(row.observation_date ?? ''), status: row.status === 'selesai' ? 'selesai' : 'draft', currentStage: row.current_stage === 'observasi' || row.current_stage === 'pasca-observasi' ? row.current_stage : 'pra-observasi', preObservation: json(row.pre_observation, {}), observation: json(row.observation, {}), reflection: json(row.reflection, {}), feedback: json(row.feedback, {}), followUps: json(row.follow_ups, []), supervisorNote: String(row.supervisor_note ?? ''), recommendation: String(row.recommendation ?? ''), createdAt: String(row.created_at ?? ''), updatedAt: String(row.updated_at ?? '') } }
+function assessmentFromRow(row: Json): Assessment { return { id: String(row.id), legacyId: typeof row.legacy_id === 'string' ? row.legacy_id : undefined, teacherId: String(row.teacher_id ?? ''), period: String(row.period ?? ''), className: String(row.class_name ?? ''), subject: String(row.subject ?? ''), topic: String(row.topic ?? ''), observer: String(row.observer ?? ''), observationDate: String(row.observation_date ?? ''), status: row.status === 'selesai' ? 'selesai' : 'draft', currentStage: row.current_stage === 'observasi' || row.current_stage === 'pasca-observasi' ? row.current_stage : 'pra-observasi', preObservation: json(row.pre_observation, {}), observation: json(row.observation, {}), reflection: json(row.reflection, {}), feedback: json(row.feedback, {}), followUps: json(row.follow_ups, []), supervisorNote: String(row.supervisor_note ?? ''), recommendation: String(row.recommendation ?? ''), createdAt: String(row.created_at ?? ''), updatedAt: String(row.updated_at ?? ''), rppDocument: row.rpp_document_name ? { name: String(row.rpp_document_name), size: Number(row.rpp_document_size ?? 0), uploadedAt: String(row.rpp_document_uploaded_at ?? '') } : undefined, rppReview: json(row.rpp_review, undefined) } }
 function settingsFromRow(row: Json): AppSettings { return { schoolName: String(row.school_name ?? defaultSettings.schoolName), defaultPeriod: String(row.default_period ?? defaultSettings.defaultPeriod), signatureCity: String(row.signature_city ?? defaultSettings.signatureCity), signatureDetail: String(row.signature_detail ?? defaultSettings.signatureDetail), supervisorSetupComplete: bool(row.supervisor_setup_complete), signatureName: String(row.signature_name ?? ''), signaturePosition: String(row.signature_position ?? ''), signatureImage: String(row.signature_image ?? '') } }
 
 function provisionUser(db: DatabaseHandle, name: string, role: 'guru' | 'supervisor', teacherId?: string) {
@@ -66,15 +70,15 @@ function upsertSupervisor(db: DatabaseHandle, input: Partial<Supervisor>) {
 
 function assessmentValues(input: Partial<Assessment>, existing?: Json) {
   const createdAt = String(existing?.created_at ?? input.createdAt ?? now())
-  return { id: String(existing?.id ?? input.id ?? newId()), legacyId: input.legacyId ?? (existing?.legacy_id as string | null) ?? null, teacherId: input.teacherId || (existing?.teacher_id as string | null) || null, period: String(input.period ?? ''), className: String(input.className ?? ''), subject: String(input.subject ?? ''), topic: String(input.topic ?? ''), observer: String(input.observer ?? ''), observationDate: String(input.observationDate ?? ''), status: input.status === 'selesai' ? 'selesai' : 'draft', currentStage: input.currentStage ?? 'pra-observasi', preObservation: JSON.stringify(input.preObservation ?? {}), observation: JSON.stringify(input.observation ?? {}), reflection: JSON.stringify(input.reflection ?? {}), feedback: JSON.stringify(input.feedback ?? {}), followUps: JSON.stringify(input.followUps ?? []), supervisorNote: String(input.supervisorNote ?? ''), recommendation: String(input.recommendation ?? ''), createdAt, updatedAt: now() }
+  return { id: String(existing?.id ?? input.id ?? newId()), legacyId: input.legacyId ?? (existing?.legacy_id as string | null) ?? null, teacherId: input.teacherId || (existing?.teacher_id as string | null) || null, period: String(input.period ?? ''), className: String(input.className ?? ''), subject: String(input.subject ?? ''), topic: String(input.topic ?? ''), observer: String(input.observer ?? ''), observationDate: String(input.observationDate ?? ''), status: input.status === 'selesai' ? 'selesai' : 'draft', currentStage: input.currentStage ?? 'pra-observasi', preObservation: JSON.stringify(input.preObservation ?? {}), observation: JSON.stringify(input.observation ?? {}), reflection: JSON.stringify(input.reflection ?? {}), feedback: JSON.stringify(input.feedback ?? {}), followUps: JSON.stringify(input.followUps ?? []), supervisorNote: String(input.supervisorNote ?? ''), recommendation: String(input.recommendation ?? ''), rppDocumentName: input.rppDocument?.name ?? existing?.rpp_document_name ?? null, rppDocumentSize: input.rppDocument?.size ?? existing?.rpp_document_size ?? null, rppDocumentUploadedAt: input.rppDocument?.uploadedAt ?? existing?.rpp_document_uploaded_at ?? null, rppDocumentPath: existing?.rpp_document_path ?? null, rppReview: input.rppReview ? JSON.stringify(input.rppReview) : (existing?.rpp_review ?? null), createdAt, updatedAt: now() }
 }
 
 function upsertAssessment(db: DatabaseHandle, input: Partial<Assessment>) {
   const existing = input.id ? db.prepare('SELECT * FROM assessments WHERE id = ?').get(input.id) as Json | undefined : (input.legacyId ? db.prepare('SELECT * FROM assessments WHERE legacy_id = ?').get(input.legacyId) as Json | undefined : undefined)
   const data = assessmentValues(input, existing)
-  db.prepare(`INSERT INTO assessments (id, legacy_id, teacher_id, period, class_name, subject, topic, observer, observation_date, status, current_stage, pre_observation, observation, reflection, feedback, follow_ups, supervisor_note, recommendation, created_at, updated_at)
-    VALUES (@id, @legacyId, @teacherId, @period, @className, @subject, @topic, @observer, @observationDate, @status, @currentStage, @preObservation, @observation, @reflection, @feedback, @followUps, @supervisorNote, @recommendation, @createdAt, @updatedAt)
-    ON CONFLICT(id) DO UPDATE SET legacy_id=excluded.legacy_id, teacher_id=excluded.teacher_id, period=excluded.period, class_name=excluded.class_name, subject=excluded.subject, topic=excluded.topic, observer=excluded.observer, observation_date=excluded.observation_date, status=excluded.status, current_stage=excluded.current_stage, pre_observation=excluded.pre_observation, observation=excluded.observation, reflection=excluded.reflection, feedback=excluded.feedback, follow_ups=excluded.follow_ups, supervisor_note=excluded.supervisor_note, recommendation=excluded.recommendation, updated_at=excluded.updated_at`).run(data)
+  db.prepare(`INSERT INTO assessments (id, legacy_id, teacher_id, period, class_name, subject, topic, observer, observation_date, status, current_stage, pre_observation, observation, reflection, feedback, follow_ups, supervisor_note, recommendation, rpp_document_name, rpp_document_size, rpp_document_uploaded_at, rpp_document_path, rpp_review, created_at, updated_at)
+    VALUES (@id, @legacyId, @teacherId, @period, @className, @subject, @topic, @observer, @observationDate, @status, @currentStage, @preObservation, @observation, @reflection, @feedback, @followUps, @supervisorNote, @recommendation, @rppDocumentName, @rppDocumentSize, @rppDocumentUploadedAt, @rppDocumentPath, @rppReview, @createdAt, @updatedAt)
+    ON CONFLICT(id) DO UPDATE SET legacy_id=excluded.legacy_id, teacher_id=excluded.teacher_id, period=excluded.period, class_name=excluded.class_name, subject=excluded.subject, topic=excluded.topic, observer=excluded.observer, observation_date=excluded.observation_date, status=excluded.status, current_stage=excluded.current_stage, pre_observation=excluded.pre_observation, observation=excluded.observation, reflection=excluded.reflection, feedback=excluded.feedback, follow_ups=excluded.follow_ups, supervisor_note=excluded.supervisor_note, recommendation=excluded.recommendation, rpp_document_name=excluded.rpp_document_name, rpp_document_size=excluded.rpp_document_size, rpp_document_uploaded_at=excluded.rpp_document_uploaded_at, rpp_document_path=excluded.rpp_document_path, rpp_review=excluded.rpp_review, updated_at=excluded.updated_at`).run(data)
   return assessmentFromRow(db.prepare('SELECT * FROM assessments WHERE id = ?').get(data.id) as Json)
 }
 
@@ -125,6 +129,8 @@ function updateSettings(db: DatabaseHandle, input: Partial<AppSettings>) {
 
 export function createApp(db: DatabaseHandle) {
   const app = express()
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } })
+  const rppUploadDir = process.env.RPP_UPLOAD_DIR || path.resolve('data/uploads/rpp')
   app.use(express.json({ limit: '10mb' }))
   app.use(cookieParser())
   app.use((_request, _response, next) => { purgeExpiredSessions(db); next() })
@@ -177,6 +183,42 @@ export function createApp(db: DatabaseHandle) {
   })
   app.post('/api/assessments', roleIs('admin', 'supervisor'), (request, response) => { try { response.status(201).json(upsertAssessment(db, request.body as Partial<Assessment>)) } catch (reason) { error(response, reason instanceof Error ? reason.message : 'Penilaian gagal disimpan.') } })
   app.patch('/api/assessments/:id', roleIs('admin', 'supervisor'), (request, response) => { try { response.json(upsertAssessment(db, { ...(request.body as Partial<Assessment>), id: String(request.params.id) })) } catch (reason) { error(response, reason instanceof Error ? reason.message : 'Penilaian gagal diperbarui.') } })
+
+  function assessmentForUser(request: Request, response: Response, id: string) {
+    const row = db.prepare('SELECT * FROM assessments WHERE id = ?').get(id) as Json | undefined
+    if (!row) { error(response, 'Penilaian tidak ditemukan.', 404); return null }
+    if (request.user!.role === 'guru' && row.teacher_id !== request.user!.teacherId) { error(response, 'Anda tidak dapat mengakses dokumen ini.', 403); return null }
+    return row
+  }
+
+  app.get('/api/assessments/:id/rpp-document', (request, response) => {
+    const row = assessmentForUser(request, response, String(request.params.id))
+    if (!row) return
+    if (!row.rpp_document_path) return error(response, 'Dokumen RPP belum tersedia.', 404)
+    return readFile(String(row.rpp_document_path)).then((buffer) => response.type('application/pdf').send(buffer)).catch(() => error(response, 'Dokumen RPP tidak dapat dibaca.', 404))
+  })
+
+  app.post('/api/assessments/:id/rpp-review', roleIs('admin', 'supervisor'), upload.single('file'), async (request, response) => {
+    const id = String(request.params.id)
+    const row = assessmentForUser(request, response, id)
+    if (!row) return
+    const file = request.file
+    if (!file) return error(response, 'Pilih berkas PDF RPP terlebih dahulu.')
+    if (file.mimetype !== 'application/pdf' || file.buffer.subarray(0, 4).toString() !== '%PDF') return error(response, 'Berkas harus berupa PDF yang valid.')
+    try {
+      const extracted = await extractRppText(file.buffer)
+      await mkdir(rppUploadDir, { recursive: true })
+      const storedPath = path.join(rppUploadDir, `${id}-${newId()}.pdf`)
+      await writeFile(storedPath, file.buffer, { mode: 0o600 })
+      const document = { name: file.originalname.slice(0, 240), size: file.size, uploadedAt: new Date().toISOString() }
+      db.prepare('UPDATE assessments SET rpp_document_name = ?, rpp_document_size = ?, rpp_document_uploaded_at = ?, rpp_document_path = ?, updated_at = ? WHERE id = ?').run(document.name, document.size, document.uploadedAt, storedPath, new Date().toISOString(), id)
+      const review = await analyzeRpp(new OpenAICompatibleRppAnalyzer(), { filename: document.name, pages: extracted.pages, assessmentContext: { subject: String(row.subject ?? ''), className: String(row.class_name ?? ''), topic: String(row.topic ?? '') } })
+      db.prepare('UPDATE assessments SET rpp_review = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(review), new Date().toISOString(), id)
+      return response.json(assessmentFromRow(db.prepare('SELECT * FROM assessments WHERE id = ?').get(id) as Json))
+    } catch (reason) {
+      return error(response, reason instanceof Error ? reason.message : 'Telaah AI gagal diproses.', 422)
+    }
+  })
 
   app.get('/api/settings', roleIs('admin', 'supervisor'), (_request, response) => response.json(settingsFromRow(db.prepare('SELECT * FROM school_settings WHERE id=1').get() as Json)))
   app.patch('/api/settings', roleIs('admin'), (request, response) => response.json(updateSettings(db, request.body as Partial<AppSettings>)))

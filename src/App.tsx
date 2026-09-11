@@ -45,7 +45,7 @@ function App() {
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const repository = useRef(createDataRepository(!isBackendConfigured)).current
 
-  const persistAssessment = async (next: Assessment, message = 'Perubahan tersimpan') => {
+  const persistAssessment = async (next: Assessment, message = 'Perubahan tersimpan'): Promise<Assessment | null> => {
     try {
       const updated = await repository.saveAssessment({ ...next, updatedAt: new Date().toISOString() })
       const nextList = [updated, ...assessments.filter((item) => item.id !== updated.id && item.id !== next.id)]
@@ -53,8 +53,10 @@ function App() {
       setActive(updated)
       setToast(message)
       window.setTimeout(() => setToast(''), 2600)
+      return updated
     } catch (reason) {
       setToast(reason instanceof Error ? reason.message : 'Perubahan gagal disimpan.')
+      return null
     }
   }
 
@@ -362,10 +364,12 @@ function getMissingObservationInfo(assessment: Assessment) {
   return missing
 }
 
-function AssessmentWorkspace({ assessment: initial, teachers, supervisors, settings, readOnly = false, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; settings: AppSettings; readOnly?: boolean; onBack: () => void; onSave: (assessment: Assessment, message?: string) => void }) {
+function AssessmentWorkspace({ assessment: initial, teachers, supervisors, settings, readOnly = false, onBack, onSave }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; settings: AppSettings; readOnly?: boolean; onBack: () => void; onSave: (assessment: Assessment, message?: string) => Promise<Assessment | null> }) {
   const [assessment, setAssessment] = useState(initial)
   const [stage, setStage] = useState<Stage>(initial.currentStage)
   const [showMeta, setShowMeta] = useState(false)
+  const [rppBusy, setRppBusy] = useState(false)
+  const [rppError, setRppError] = useState('')
   const teacher = teachers.find((item) => item.id === assessment.teacherId)
   const stageIndex = steps.findIndex((step) => step.id === stage)
   const update = (patch: Partial<Assessment>) => setAssessment((current) => ({ ...current, ...patch, currentStage: stage }))
@@ -377,6 +381,32 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
   const save = (message = 'Perubahan tersimpan') => onSave(assessment, message)
   const moveTo = (nextStage: Stage, message = 'Tahap penilaian diperbarui') => { const next = { ...assessment, currentStage: nextStage }; setAssessment(next); setStage(nextStage); onSave(next, message) }
   const goNext = () => { if (!observationInfoComplete) { setShowMeta(true); return } if (stageIndex === 0) { if (!preComplete) { window.alert('Lengkapi seluruh skor pra-observasi sebelum melanjutkan ke observasi.'); return } moveTo('observasi', 'Tahap observasi dibuka') } else if (stageIndex === 1) { if (!observationComplete) { window.alert('Lengkapi seluruh skor observasi sebelum melanjutkan ke pasca-observasi.'); return } moveTo('pasca-observasi', 'Tahap pasca-observasi dibuka') } else { const finished = { ...assessment, status: 'selesai' as const, currentStage: 'pasca-observasi' as const }; onSave(finished, 'Penilaian ditandai selesai') } }
+  const uploadRpp = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.type !== 'application/pdf') { setRppError('Berkas harus berformat PDF.'); return }
+    setRppBusy(true); setRppError('')
+    try {
+      let target = assessment
+      if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(target.id)) {
+        const saved = await onSave(target, 'Draf disimpan sebelum telaah RPP')
+        if (!saved) throw new Error('Draf belum berhasil disimpan. Coba lagi.')
+        target = saved; setAssessment(saved)
+      }
+      const form = new FormData(); form.append('file', file)
+      const response = await fetch(`/api/assessments/${target.id}/rpp-review`, { method: 'POST', credentials: 'include', body: form })
+      const body = await response.json().catch(() => ({})) as { error?: string } & Assessment
+      if (!response.ok) throw new Error(body.error || 'Telaah AI gagal diproses.')
+      setAssessment(body); await onSave(body, 'Telaah AI RPP selesai')
+    } catch (reason) { setRppError(reason instanceof Error ? reason.message : 'Telaah AI gagal diproses.') } finally { setRppBusy(false) }
+  }
+  const applyAiScores = () => {
+    if (!assessment.rppReview) return
+    const next = { ...assessment, preObservation: { ...assessment.preObservation } }
+    assessment.rppReview.items.forEach((item) => { if (item.suggestedScore) next.preObservation[item.itemId] = { score: item.suggestedScore, note: item.evidence ? `Bukti AI: ${item.evidence}` : '' } })
+    setAssessment(next); void onSave(next, 'Saran skor AI diterapkan sebagai draf')
+  }
   return <div className={`page-wrap workspace-page ${readOnly ? 'read-only-workspace' : ''}`}>
     <div className="workspace-top"><button className="back-button" onClick={onBack}><ArrowLeft size={17} /> Kembali ke ringkasan</button><div className="workspace-actions"><span className={`status-badge ${assessment.status}`}>{assessment.status === 'selesai' ? <Check size={14} /> : <span className="status-dot" />}{assessment.status === 'selesai' ? 'Selesai' : 'Draf'}</span>{!readOnly && <button className="secondary-button compact" onClick={() => save()}><Check size={16} /> Simpan draf</button>}</div></div>
     <div className="workspace-heading"><div><p className="eyebrow">Penilaian kinerja guru · {assessment.period}</p><h1>{teacher?.name ?? 'Penilaian baru'}</h1><p className="muted">Lengkapi instrumen secara bertahap. Perubahan tersimpan sebagai draf.</p></div><button className="icon-button outlined" aria-label="Unduh laporan" onClick={() => window.print()}><FileDown size={18} /></button></div>
@@ -385,7 +415,7 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
       {!showMeta && <button className={`meta-summary ${teacher ? '' : 'is-empty'}`} onClick={() => setShowMeta(true)} aria-expanded={false} aria-controls="observation-info-panel"><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div><strong>{teacher?.name ?? 'Lengkapi informasi observasi'}</strong><span>{teacher ? `${assessment.className || 'Kelas belum diisi'} · ${assessment.subject || teacher.subject} · Observasi ${formatDate(assessment.observationDate)}` : 'Tambahkan guru, kelas, mata pelajaran, dan tanggal observasi'}</span></div><ChevronDown size={18} /></button>}
       <div className="stepper">{steps.map((item, index) => { const unlocked = observationInfoComplete && isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id && observationInfoComplete ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{!observationInfoComplete ? 'Lengkapi informasi observasi' : unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
       {!observationInfoComplete && <ObservationInfoRequired missing={missingObservationInfo} onOpen={() => setShowMeta(true)} />}
-      {observationInfoComplete && stage === 'pra-observasi' && <FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} />}
+      {observationInfoComplete && stage === 'pra-observasi' && <><RppReviewPanel assessment={assessment} busy={rppBusy} error={rppError} readOnly={readOnly} onUpload={uploadRpp} onApplyScores={applyAiScores} /><FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} /></>}
       {observationInfoComplete && stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
       {observationInfoComplete && stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
     </fieldset>
@@ -396,6 +426,18 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
 
 function ObservationInfoRequired({ missing, onOpen }: { missing: string[]; onOpen: () => void }) {
   return <div className="observation-info-required"><div className="required-info-icon"><CircleAlert size={20} /></div><div className="required-info-copy"><strong>Lengkapi informasi observasi terlebih dahulu</strong><span>Butir penilaian akan aktif setelah data berikut diisi: {missing.join(', ')}.</span></div><button className="primary-button compact" onClick={onOpen}>Isi informasi</button></div>
+}
+
+function RppReviewPanel({ assessment, busy, error, readOnly, onUpload, onApplyScores }: { assessment: Assessment; busy: boolean; error: string; readOnly: boolean; onUpload: (event: ChangeEvent<HTMLInputElement>) => Promise<void>; onApplyScores: () => void }) {
+  const review = assessment.rppReview
+  const suggestions = review?.items.filter((item) => item.suggestedScore) ?? []
+  const rubricById = new Map(preObservationItems.map((item) => [item.id, item]))
+  return <section className="rpp-review-panel panel">
+    <div className="rpp-review-head"><div><span className="eyebrow">Asisten telaah AI</span><h2>Unggah RPP / Modul Ajar</h2><p className="muted">AI membaca bukti pada PDF berdasarkan instrumen telaah RPP. Supervisor tetap memeriksa dan mengesahkan skor.</p></div><div className="rpp-review-actions">{assessment.rppDocument && <a className="secondary-button compact" href={`/api/assessments/${assessment.id}/rpp-document`} target="_blank" rel="noreferrer">Buka PDF</a>}{!readOnly && <label className="primary-button compact rpp-upload-button"><Upload size={15} />{busy ? 'Menganalisis...' : assessment.rppDocument ? 'Ganti PDF' : 'Pilih PDF'}<input type="file" accept="application/pdf,.pdf" onChange={(event) => void onUpload(event)} disabled={busy} /></label>}</div></div>
+    {error && <div className="rpp-review-error" role="alert">{error}</div>}
+    {!review && !error && <div className="rpp-review-empty">Belum ada analisis. Gunakan PDF RPP yang memiliki teks yang dapat diseleksi.</div>}
+    {review && <><div className="rpp-review-summary"><strong>Ringkasan AI</strong><span>{review.summary}</span><small>{assessment.rppDocument?.name} · dianalisis {formatDate(review.analyzedAt)}</small></div><div className="rpp-review-toolbar"><span>{suggestions.length} saran skor tersedia. Semua saran masih berstatus draf.</span>{!readOnly && <button type="button" className="secondary-button compact" onClick={onApplyScores} disabled={!suggestions.length}>Terapkan saran sebagai draf</button>}</div><div className="rpp-review-list">{review.items.map((result) => { const rubric = rubricById.get(result.itemId); return <div className="rpp-review-item" key={result.itemId}><div className="rpp-review-item-title"><strong>{rubric?.number}. {rubric?.title ?? result.itemId}</strong><span className={`rpp-status ${result.status}`}>{result.status.replace('-', ' ')}</span>{result.suggestedScore && <span className="score-pill score-3">Saran {result.suggestedScore}/4</span>}</div><p>{result.rationale}</p>{result.evidence && <blockquote>“{result.evidence}”{result.pageNumber ? <small> · halaman {result.pageNumber}</small> : null}</blockquote>}<small className="rpp-confidence">Keyakinan AI: {result.confidence}</small></div> })}</div></>}
+  </section>
 }
 
 function MetaForm({ assessment, teachers, supervisors, onChange, onClose }: { assessment: Assessment; teachers: Teacher[]; supervisors: Supervisor[]; onChange: (patch: Partial<Assessment>) => void; onClose: () => void }) {

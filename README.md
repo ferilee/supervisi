@@ -26,6 +26,20 @@ Mode browser-only lama dapat digunakan untuk prototipe dengan `VITE_USE_LOCAL_DA
 
 Otorisasi ditegakkan di server, bukan hanya dengan menyembunyikan menu. Sesi memakai cookie HTTP-only dan password disimpan sebagai hash.
 
+## Telaah RPP dengan AI
+
+Pada tahap **Pra-observasi**, Admin atau Supervisor dapat mengunggah RPP/Modul Ajar PDF. Backend mengekstrak teks, mengirim instrumen dan isi dokumen ke provider AI yang dikonfigurasi, lalu menyimpan hasil per butir berupa status, bukti, halaman, alasan, tingkat keyakinan, dan saran skor 1–4.
+
+AI tidak menetapkan nilai final. Supervisor harus memeriksa bukti dan memilih **Terapkan saran sebagai draf** sebelum skor masuk ke instrumen. API key hanya dibaca backend melalui `.env`:
+
+```env
+AI_API_KEY=isi-kunci-provider-ai
+AI_API_URL=https://api.openai.com/v1/chat/completions
+AI_MODEL=gpt-4o-mini
+```
+
+Versi pertama memerlukan PDF dengan lapisan teks yang dapat diseleksi. PDF scan/gambar akan ditolak dengan pesan yang jelas; OCR menjadi tahap pengembangan berikutnya. Berkas PDF disimpan pada volume yang sama di `/app/data/uploads/rpp`, sehingga berada di host pada `/srv/data/supervisi/sqlite/uploads/rpp`.
+
 ## Docker, GHCR, dan Arcane
 
 Workflow [`publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml) dijalankan manual dari GitHub Actions dan menerbitkan `ghcr.io/ferilee/supervisi:latest`. Workflow tidak lagi membutuhkan GitHub Actions Variables Supabase.

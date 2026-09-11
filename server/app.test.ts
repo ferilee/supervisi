@@ -79,4 +79,11 @@ describe('SQLite backend', () => {
     closeDatabase(second)
     rmSync(filename, { force: true }); rmSync(`${filename}-shm`, { force: true }); rmSync(`${filename}-wal`, { force: true })
   })
+
+  it('menolak telaah tanpa berkas PDF', async () => {
+    const app = testApp()
+    const admin = await app.post('/api/auth/login').send({ username: 'Ferilee', password: 'F3r!-lee', role: 'admin' }).expect(200)
+    const assessment = await app.post('/api/assessments').set('Cookie', admin.headers['set-cookie']).send({ subject: 'Informatika', currentStage: 'pra-observasi' }).expect(201)
+    await app.post(`/api/assessments/${assessment.body.id}/rpp-review`).set('Cookie', admin.headers['set-cookie']).expect(400)
+  })
 })

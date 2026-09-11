@@ -10,6 +10,7 @@ services:
       NODE_ENV: production
       PORT: 2005
       DATABASE_PATH: /app/data/supervisi.sqlite
+      RPP_UPLOAD_DIR: /app/data/uploads/rpp
     volumes:
       - /srv/data/supervisi/sqlite:/app/data
     networks:

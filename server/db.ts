@@ -108,6 +108,11 @@ export function createDatabase(filename: string): DatabaseHandle {
       follow_ups TEXT NOT NULL DEFAULT '[]',
       supervisor_note TEXT NOT NULL DEFAULT '',
       recommendation TEXT NOT NULL DEFAULT '',
+      rpp_document_name TEXT,
+      rpp_document_size INTEGER,
+      rpp_document_uploaded_at TEXT,
+      rpp_document_path TEXT,
+      rpp_review TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON DELETE SET NULL
@@ -124,6 +129,12 @@ export function createDatabase(filename: string): DatabaseHandle {
       signature_image TEXT NOT NULL DEFAULT ''
     );
   `)
+
+  const assessmentColumns = db.prepare('PRAGMA table_info(assessments)').all() as Array<{ name: string }>
+  const knownColumns = new Set(assessmentColumns.map((column) => column.name))
+  for (const [name, definition] of [['rpp_document_name', 'TEXT'], ['rpp_document_size', 'INTEGER'], ['rpp_document_uploaded_at', 'TEXT'], ['rpp_document_path', 'TEXT'], ['rpp_review', 'TEXT']] as const) {
+    if (!knownColumns.has(name)) db.exec(`ALTER TABLE assessments ADD COLUMN ${name} ${definition}`)
+  }
 
   const now = new Date().toISOString()
   const existingSettings = db.prepare('SELECT id FROM school_settings WHERE id = 1').get()
