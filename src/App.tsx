@@ -642,7 +642,7 @@ function PrintObservation({ fields, responses, assessment, groups, deepGroups, y
 }
 
 function PrintTotalTable({ items, responses }: { items: RubricItem[]; responses: Record<string, ScoredResponse> }) {
-  return <table className="print-table print-total-table"><colgroup><col className="print-col-no" /><col className="print-col-first" /><col className="print-col-indicator" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><tbody><tr className="print-total-row"><td colSpan={3}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tbody></table>
+  return <table className="print-table print-compact-table print-total-table"><colgroup><col className="print-col-no" /><col className="print-col-compact-aspect" /><col className="print-col-score" /><col className="print-col-evidence" /></colgroup><tbody><tr className="print-total-row"><td colSpan={2}>Total Skor</td><td className="print-score">{totalScore(items, responses) || ''}</td><td>{'\u00a0'}</td></tr></tbody></table>
 }
 
 function PrintCompactRubricTable({ items, responses, evidenceHeader, firstHeader = 'Aspek yang Diamati' }: { items: RubricItem[]; responses: Record<string, ScoredResponse>; evidenceHeader: string; firstHeader?: string }) {
