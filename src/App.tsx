@@ -370,6 +370,7 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
   const [showMeta, setShowMeta] = useState(false)
   const [rppBusy, setRppBusy] = useState(false)
   const [rppError, setRppError] = useState('')
+  const [preReviewMode, setPreReviewMode] = useState<'manual' | 'ai'>('manual')
   const teacher = teachers.find((item) => item.id === assessment.teacherId)
   const stageIndex = steps.findIndex((step) => step.id === stage)
   const update = (patch: Partial<Assessment>) => setAssessment((current) => ({ ...current, ...patch, currentStage: stage }))
@@ -398,7 +399,7 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
       const response = await fetch(`/api/assessments/${target.id}/rpp-review`, { method: 'POST', credentials: 'include', body: form })
       const body = await response.json().catch(() => ({})) as { error?: string } & Assessment
       if (!response.ok) throw new Error(body.error || 'Telaah AI gagal diproses.')
-      setAssessment(body); await onSave(body, 'Telaah AI RPP selesai')
+      setAssessment(body); setPreReviewMode('ai'); await onSave(body, 'Telaah AI RPP selesai')
     } catch (reason) { setRppError(reason instanceof Error ? reason.message : 'Telaah AI gagal diproses.') } finally { setRppBusy(false) }
   }
   const applyAiScores = () => {
@@ -415,7 +416,7 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
       {!showMeta && <button className={`meta-summary ${teacher ? '' : 'is-empty'}`} onClick={() => setShowMeta(true)} aria-expanded={false} aria-controls="observation-info-panel"><div className="avatar" style={{ background: teacher?.color }}>{teacher?.initials ?? '?'}</div><div><strong>{teacher?.name ?? 'Lengkapi informasi observasi'}</strong><span>{teacher ? `${assessment.className || 'Kelas belum diisi'} · ${assessment.subject || teacher.subject} · Observasi ${formatDate(assessment.observationDate)}` : 'Tambahkan guru, kelas, mata pelajaran, dan tanggal observasi'}</span></div><ChevronDown size={18} /></button>}
       <div className="stepper">{steps.map((item, index) => { const unlocked = observationInfoComplete && isStageUnlocked(index, assessment); return <button key={item.id} className={`stepper-item ${stage === item.id && observationInfoComplete ? 'current' : ''} ${index < stageIndex ? 'visited' : ''} ${!unlocked ? 'locked' : ''}`} disabled={!unlocked} onClick={() => moveTo(item.id)}><span className="stepper-circle">{index < stageIndex ? <Check size={15} /> : index + 1}</span><span><strong>{item.label}</strong><small>{!observationInfoComplete ? 'Lengkapi informasi observasi' : unlocked ? item.short : 'Selesaikan tahap sebelumnya'}</small></span></button> })}</div>
       {!observationInfoComplete && <ObservationInfoRequired missing={missingObservationInfo} onOpen={() => setShowMeta(true)} />}
-      {observationInfoComplete && stage === 'pra-observasi' && <><RppReviewPanel assessment={assessment} busy={rppBusy} error={rppError} readOnly={readOnly} onUpload={uploadRpp} onApplyScores={applyAiScores} /><FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} /></>}
+      {observationInfoComplete && stage === 'pra-observasi' && <><ReviewModeSelector mode={preReviewMode} review={assessment.rppReview} onChange={setPreReviewMode} />{preReviewMode === 'ai' ? <RppReviewPanel assessment={assessment} busy={rppBusy} error={rppError} readOnly={readOnly} onUpload={uploadRpp} onApplyScores={applyAiScores} /> : <FocusedRubricStage title="Telaah RPP / Modul Ajar" intro="Tinjau kesiapan perencanaan pembelajaran sebelum observasi berlangsung." items={preObservationItems} responses={assessment.preObservation} onResponse={(id, patch) => updateResponse('preObservation', id, patch)} />}</>}
       {observationInfoComplete && stage === 'observasi' && <FocusedRubricStage title="Observasi Pembelajaran" intro="Catat bukti pembelajaran yang terlihat selama observasi di kelas." items={observationItems} responses={assessment.observation} onResponse={(id, patch) => updateResponse('observation', id, patch)} evidenceLabel="Bukti pembelajaran" mode="sections" />}
       {observationInfoComplete && stage === 'pasca-observasi' && <PostObservation assessment={assessment} onChange={setAssessment} />}
     </fieldset>
@@ -426,6 +427,11 @@ function AssessmentWorkspace({ assessment: initial, teachers, supervisors, setti
 
 function ObservationInfoRequired({ missing, onOpen }: { missing: string[]; onOpen: () => void }) {
   return <div className="observation-info-required"><div className="required-info-icon"><CircleAlert size={20} /></div><div className="required-info-copy"><strong>Lengkapi informasi observasi terlebih dahulu</strong><span>Butir penilaian akan aktif setelah data berikut diisi: {missing.join(', ')}.</span></div><button className="primary-button compact" onClick={onOpen}>Isi informasi</button></div>
+}
+
+function ReviewModeSelector({ mode, review, onChange }: { mode: 'manual' | 'ai'; review?: Assessment['rppReview']; onChange: (mode: 'manual' | 'ai') => void }) {
+  const suggestionCount = review?.items.filter((item) => item.suggestedScore).length ?? 0
+  return <section className="review-mode-selector panel" aria-labelledby="review-mode-title"><div className="review-mode-copy"><span className="eyebrow">Metode telaah</span><h2 id="review-mode-title">Pilih cara menelaah RPP</h2><p className="muted">Gunakan telaah manual atau minta AI membantu menemukan bukti. Skor akhir tetap disahkan supervisor.</p></div><div className="review-mode-options" role="group" aria-label="Pilihan metode telaah"><button type="button" className={`review-mode-option ${mode === 'manual' ? 'active' : ''}`} aria-pressed={mode === 'manual'} onClick={() => onChange('manual')}><span className="review-mode-icon manual">✓</span><span><strong>Telaah manual</strong><small>Nilai butir langsung dari instrumen</small></span></button><button type="button" className={`review-mode-option ${mode === 'ai' ? 'active' : ''}`} aria-pressed={mode === 'ai'} onClick={() => onChange('ai')}><span className="review-mode-icon ai"><Sparkles size={15} /></span><span><strong>Bantuan AI</strong><small>{review ? `${suggestionCount} saran skor tersedia` : 'Unggah PDF dan dapatkan saran'}</small></span></button></div></section>
 }
 
 function RppReviewPanel({ assessment, busy, error, readOnly, onUpload, onApplyScores }: { assessment: Assessment; busy: boolean; error: string; readOnly: boolean; onUpload: (event: ChangeEvent<HTMLInputElement>) => Promise<void>; onApplyScores: () => void }) {

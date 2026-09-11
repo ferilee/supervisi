@@ -1,3 +1,20 @@
+.review-mode-selector { margin: 20px 0 16px; padding: 17px 19px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-color: #dcd8ff; background: white; }
+.review-mode-copy { min-width: 230px; }
+.review-mode-copy .eyebrow { color: #7467d8; margin-bottom: 6px; }
+.review-mode-copy h2 { margin: 0 0 5px; color: #30295f; font-size: 15px; }
+.review-mode-options { display: grid; grid-template-columns: repeat(2, minmax(190px, 1fr)); gap: 8px; width: min(100%, 500px); }
+.review-mode-option { min-height: 61px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e3e1ef; border-radius: 9px; background: #fff; color: #5e6073; text-align: left; transition: border-color .15s, background .15s, box-shadow .15s; }
+.review-mode-option:hover { border-color: #aaa2f3; background: #faf9ff; }
+.review-mode-option.active { border-color: #6c5ce7; background: #f3f1ff; box-shadow: 0 0 0 2px #e8e5ff; color: #3e347e; }
+.review-mode-option > span:last-child { min-width: 0; }
+.review-mode-option strong, .review-mode-option small { display: block; }
+.review-mode-option strong { font-size: 11px; }
+.review-mode-option small { margin-top: 3px; color: #88899a; font-size: 9px; line-height: 1.35; }
+.review-mode-option.active small { color: #716ba0; }
+.review-mode-icon { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 8px; background: #f0eff7; color: #817c9d; font-size: 13px; font-weight: 700; }
+.review-mode-icon.ai { background: #e9e6ff; color: #5d50e8; }
+.review-mode-option.active .review-mode-icon.manual { background: #d9f0e8; color: #287967; }
+
 .rpp-review-panel { margin: 20px 0 24px; padding: 19px; border-color: #dcd8ff; background: linear-gradient(135deg, #fff 0%, #faf9ff 100%); }
 .rpp-review-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
 .rpp-review-head h2 { margin: 0 0 5px; color: #30295f; font-size: 16px; }
@@ -25,6 +42,9 @@
 .rpp-confidence { color: #9aa0a8; font-size: 9px; }
 
 @media (max-width: 650px) {
+  .review-mode-selector { align-items: stretch; flex-direction: column; gap: 13px; margin-top: 16px; padding: 14px 12px; }
+  .review-mode-options { width: 100%; grid-template-columns: 1fr; }
+  .review-mode-option { min-height: 55px; }
   .rpp-review-panel { padding: 14px 12px; }
   .rpp-review-head { flex-direction: column; }
   .rpp-review-actions { width: 100%; justify-content: flex-start; }
