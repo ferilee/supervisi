@@ -40,6 +40,8 @@ AI_MODEL=gpt-4o-mini
 
 Versi pertama memerlukan PDF dengan lapisan teks yang dapat diseleksi. PDF scan/gambar akan ditolak dengan pesan yang jelas; OCR menjadi tahap pengembangan berikutnya. Berkas PDF disimpan pada volume yang sama di `/app/data/uploads/rpp`, sehingga berada di host pada `/srv/data/supervisi/sqlite/uploads/rpp`.
 
+Referensi telaah disimpan di folder [`docs/`](./docs): panduan Perencanaan Pembelajaran Mendalam serta instrumen pra-observasi, observasi, dan pasca-observasi. Berkas tersebut ikut dimasukkan ke image dan dibaca backend saat membentuk permintaan telaah AI. Atur `RPP_REFERENCE_DIR` hanya jika lokasi referensi ingin diganti.
+
 ## Docker, GHCR, dan Arcane
 
 Workflow [`publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml) dijalankan manual dari GitHub Actions dan menerbitkan `ghcr.io/ferilee/supervisi:latest`. Workflow tidak lagi membutuhkan GitHub Actions Variables Supabase.

@@ -21,11 +21,16 @@ describe('RPP AI review module', () => {
   })
 
   it('mengubah respons provider AI menjadi hasil telaah ber-ID instrumen', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ summary: 'Ringkasan', items: [{ itemId: 'pre-1', status: 'sebagian', suggestedScore: 3, evidence: 'Tujuan pembelajaran', pageNumber: 1, rationale: 'Sebagian indikator tampak.', confidence: 'sedang' }] }) } }] }) })))
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ summary: 'Ringkasan', items: [{ itemId: 'pre-1', status: 'sebagian', suggestedScore: 3, evidence: 'Tujuan pembelajaran', pageNumber: 1, rationale: 'Sebagian indikator tampak.', confidence: 'sedang' }] }) } }] }) }))
+    vi.stubGlobal('fetch', fetchMock)
     const review = await analyzeRpp(new OpenAICompatibleRppAnalyzer({ apiKey: 'test-key', url: 'http://ai.test', model: 'test-model' }), { filename: 'rpp.pdf', pages: [{ pageNumber: 1, text: 'Tujuan pembelajaran' }], assessmentContext: { subject: 'Informatika', className: 'XI', topic: 'Jaringan' } })
     expect(review.items).toHaveLength(preObservationItems.length)
     expect(review.items[0]).toMatchObject({ status: 'sebagian', suggestedScore: 3, evidence: 'Tujuan pembelajaran' })
     expect(review.provider).toBe('openai-compatible')
+    const requestInit = (fetchMock.mock.calls[0] as unknown[] | undefined)?.[1] as { body?: string } | undefined
+    const request = JSON.parse(String(requestInit?.body)) as { messages: Array<{ content: string }> }
+    expect(request.messages[1]?.content).toContain('REFERENSI SEKOLAH')
+    expect(request.messages[1]?.content).toContain('PANDUAN FORMAT PERENCANAAN PEMBELAJARAN MENDALAM')
     vi.unstubAllGlobals()
   })
 })

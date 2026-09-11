@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { PDFParse } from 'pdf-parse'
 import { preObservationItems } from '../src/data/instrument.js'
 import type { RppReview, RppReviewConfidence, RppReviewItem, RppReviewStatus, Score } from '../src/types.js'
@@ -12,6 +14,23 @@ export interface RppAnalyzer {
 }
 
 const maxDocumentChars = Number(process.env.AI_MAX_DOCUMENT_CHARS || 120_000)
+const referenceFiles = [
+  'panduan_perencanaan_pembelajaran_pm.md',
+  'instrumen-praobservasi.md',
+  'instrumen-observasi.md',
+  'instrumen-pascaobservasi.md',
+] as const
+
+function loadSchoolReferences() {
+  const referenceDir = process.env.RPP_REFERENCE_DIR || path.resolve(process.cwd(), 'docs')
+  return referenceFiles.map((filename) => {
+    try {
+      return `=== ${filename} ===\n${readFileSync(path.join(referenceDir, filename), 'utf8')}`
+    } catch {
+      return ''
+    }
+  }).filter(Boolean).join('\n\n').slice(0, 30_000)
+}
 
 export async function extractRppText(buffer: Buffer): Promise<ExtractedRpp> {
   const parser = new PDFParse({ data: buffer })
@@ -71,8 +90,9 @@ export class OpenAICompatibleRppAnalyzer implements RppAnalyzer {
     if (!this.apiKey) throw new Error('AI belum dikonfigurasi. Isi AI_API_KEY pada environment backend.')
     const rubric = preObservationItems.map((item) => ({ itemId: item.id, number: item.number, title: item.title, indicator: item.indicator })).map((item) => JSON.stringify(item)).join('\n')
     const document = input.pages.map((page) => `HALAMAN ${page.pageNumber}:\n${page.text}`).join('\n\n').slice(0, maxDocumentChars)
-    const system = `Anda adalah asisten telaah RPP/Modul Ajar untuk supervisor sekolah. Analisis hanya berdasarkan dokumen. Jangan mengarang bukti. Jika bukti tidak ditemukan, gunakan status "belum-ditemukan", evidence kosong, pageNumber kosong, confidence rendah. "sebagian" berarti indikator hanya didukung sebagian. suggestedScore memakai skala 1-4 sebagai SARAN, bukan keputusan final. Kembalikan JSON valid tanpa markdown dengan bentuk {"summary":"...","items":[{"itemId":"pre-1","status":"terpenuhi|sebagian|belum-ditemukan","suggestedScore":1,"evidence":"kutipan singkat","pageNumber":1,"rationale":"...","confidence":"tinggi|sedang|rendah"}]}. Wajib mengembalikan semua item instrumen tepat satu kali.`
-    const user = `Nama berkas: ${input.filename}\nKonteks penilaian: mata pelajaran=${input.assessmentContext.subject || '-'}, kelas=${input.assessmentContext.className || '-'}, materi=${input.assessmentContext.topic || '-'}\n\nINSTRUMEN:\n${rubric}\n\nDOKUMEN RPP:\n${document}`
+    const references = loadSchoolReferences()
+    const system = `Anda adalah asisten telaah RPP/Modul Ajar untuk supervisor sekolah. Gunakan REFERENSI SEKOLAH sebagai pedoman interpretasi Pembelajaran Mendalam dan instrumen, tetapi nilai hanya berdasarkan isi DOKUMEN RPP. Jangan mengarang bukti. Jika bukti tidak ditemukan, gunakan status "belum-ditemukan", evidence kosong, pageNumber kosong, confidence rendah. "sebagian" berarti indikator hanya didukung sebagian. suggestedScore memakai skala 1-4 sebagai SARAN, bukan keputusan final. Kembalikan JSON valid tanpa markdown dengan bentuk {"summary":"...","items":[{"itemId":"pre-1","status":"terpenuhi|sebagian|belum-ditemukan","suggestedScore":1,"evidence":"kutipan singkat","pageNumber":1,"rationale":"...","confidence":"tinggi|sedang|rendah"}]}. Wajib mengembalikan semua item instrumen tepat satu kali.`
+    const user = `Nama berkas: ${input.filename}\nKonteks penilaian: mata pelajaran=${input.assessmentContext.subject || '-'}, kelas=${input.assessmentContext.className || '-'}, materi=${input.assessmentContext.topic || '-'}\n\nINSTRUMEN PRA-OBSERVASI YANG DINILAI:\n${rubric}\n\nREFERENSI SEKOLAH:\n${references || 'Referensi sekolah tidak tersedia; gunakan instrumen yang diberikan.'}\n\nDOKUMEN RPP:\n${document}`
     const response = await fetch(this.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, temperature: 0.1, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) })
     const payload = await response.json().catch(() => ({})) as { error?: { message?: string }; choices?: Array<{ message?: { content?: unknown } }> }
     if (!response.ok) throw new Error(payload.error?.message || `Layanan AI gagal (${response.status}).`)
